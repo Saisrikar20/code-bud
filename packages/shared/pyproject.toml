@@ -1,0 +1,12 @@
+[project]
+name = "shared"
+version = "0.1.0"
+description = "Shared models, schemas, and configurations for Code-Bud"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

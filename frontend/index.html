@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DEVs IDE</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app-container">
+
+    <!-- TOP MENU / TITLE BAR -->
+    <header class="titlebar">
+      <div class="titlebar-left">
+        <div class="devs-logo" style="display:flex; align-items:center; gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span style="font-weight:800; letter-spacing:0.5px; font-size:14px; color:#ffffff;">DEVs IDE</span>
+        </div>
+      </div>
+
+      <div class="titlebar-center">
+        <span id="window-title-project">workspace</span> - <span class="active-file-title" id="window-title-file">DEVs IDE</span>
+      </div>
+
+      <div class="titlebar-right">
+        <div class="action-icon" title="Toggle Explorer (Sidebar)" id="btn-toggle-sidebar">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v10H2V3zm1 1v8h4V4H3zm5 0v8h5V4H8z"/></svg>
+        </div>
+        <div class="action-icon" title="Toggle DEVs Agent" id="btn-toggle-agent">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v10H2V3zm1 1v8h7V4H3zm8 0v8h2V4h-2z"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN BODY -->
+    <div class="workspace-body">
+
+      <!-- SIDEBAR: EXPLORER -->
+      <section class="sidebar" id="sidebar-explorer">
+        <div class="sidebar-header">
+          <span>EXPLORER</span>
+        </div>
+
+        <div class="sidebar-content">
+          <div class="tree-section-header" id="workspace-folder-header">
+            <div style="display:flex; align-items:center; gap:4px; overflow:hidden;">
+              <span id="workspace-folder-toggle" style="font-size:10px; width:12px; display:inline-block; color:#888888;">˅</span>
+              <span style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" id="workspace-folder-name">WORKSPACE</span>
+            </div>
+            <div style="display:flex; gap:4px; align-items:center;">
+              <button class="tree-action-icon" id="btn-explorer-new-file" title="New File" style="background:none; border:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+              </button>
+              <button class="tree-action-icon" id="btn-explorer-new-folder" title="New Folder" style="background:none; border:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+              </button>
+              <button class="tree-action-icon" id="btn-explorer-refresh" title="Refresh" style="background:none; border:none;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic File Tree -->
+          <ul class="file-tree" id="file-tree-root">
+            <!-- Populated dynamically by TypeScript explorer -->
+          </ul>
+        </div>
+      </section>
+
+      <!-- RESIZER: SIDEBAR -->
+      <div class="resizer" id="resizer-sidebar" title="Drag to resize Explorer"></div>
+
+      <!-- MAIN CODE EDITOR -->
+      <main class="editor-container">
+        <!-- Editor Tabs -->
+        <div class="editor-tabbar" id="editor-tabs">
+          <!-- Injected dynamically by editor.ts -->
+        </div>
+
+        <!-- Breadcrumbs & Actions -->
+        <div class="breadcrumbs-container" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border-bottom:1px solid var(--border-subtle); padding:0 12px; height:28px;">
+          <div class="breadcrumbs" id="editor-breadcrumbs" style="border:none; padding:0; height:auto;">
+            <span class="breadcrumb-item">workspace</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="btn-run-code" title="Run in Execution Drawer" style="display:none; background:#181818; border:1px solid rgba(255,255,255,0.18); color:#ffffff; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
+              <span>▶</span> <span>Run</span>
+            </button>
+            <button id="btn-run-terminal" title="Run interactively in native Terminal Window (Command Prompt)" style="display:none; background:#181818; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
+              <span>↗</span> <span>Run in Terminal</span>
+            </button>
+            <button id="btn-delete-file" title="Delete current file from workspace" style="display:none; background:#181818; border:1px solid rgba(239,68,68,0.35); color:#fca5a5; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Code Editor Area -->
+        <div class="code-editor-wrapper">
+          <div class="line-numbers" id="line-numbers">
+            <!-- Line numbers populated by editor.ts -->
+          </div>
+
+          <div class="code-area" id="code-content" contenteditable="true" spellcheck="false">
+            <!-- Code content loaded here -->
+          </div>
+
+          <!-- Minimap -->
+          <div class="minimap" id="editor-minimap">
+            <!-- Visual lines of minimap -->
+          </div>
+        </div>
+
+        <!-- Real Execution Output Drawer -->
+        <div id="execution-output-drawer" style="display:none; background:#0a0a0a; border-top:1px solid var(--border-subtle); padding:10px 14px; font-family:var(--font-code); font-size:12px; max-height:220px; overflow-y:auto;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; color:#a3a3a3; font-size:11px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span id="output-header-title" style="font-weight:600; color:#ffffff;">EXECUTION OUTPUT</span>
+              <button id="btn-drawer-terminal" title="Launch in interactive Command Prompt" style="background:#141414; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; font-size:11px; font-weight:600; padding:1px 8px; border-radius:10px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <span>↗</span> <span>Open in Terminal Window</span>
+              </button>
+            </div>
+            <span id="btn-close-output" style="cursor:pointer; font-size:12px; padding:2px 6px;">✕</span>
+          </div>
+          <pre id="output-content-text" style="margin:0; white-space:pre-wrap; color:#e2e8f0; line-height:18px;"></pre>
+        </div>
+      </main>
+
+      <!-- RESIZER: AGENT SIDECAR -->
+      <div class="resizer" id="resizer-agent" title="Drag to resize DEVs Agent"></div>
+
+      <!-- RIGHT SIDECAR: DEVS AGENT -->
+      <aside class="agent-pane" id="agent-pane">
+        <div class="agent-header">
+          <div class="agent-title">
+            <span>DEVs Agent</span>
+          </div>
+          <div class="agent-header-actions">
+            <div class="action-icon" title="New Session" id="btn-new-chat">+</div>
+            <div class="action-icon" title="Close" id="btn-close-agent">✕</div>
+          </div>
+        </div>
+
+        <div class="agent-body">
+          <div class="agent-workspace-title">WORKSPACE</div>
+
+          <!-- Conversation Message Stream -->
+          <div class="chat-messages" id="chat-messages">
+            <!-- Welcome message -->
+            <div class="chat-bubble assistant">
+              <div class="assistant-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                <span>DEVs Agent</span>
+              </div>
+              <div>Hello! I'm your coding agent ready to help you build in <strong>DEVs IDE</strong>.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Input Container -->
+        <div class="agent-input-container">
+          <div class="agent-input-box">
+            <textarea
+              class="agent-textarea"
+              id="agent-prompt-input"
+              rows="1"
+              placeholder="Ask anything, describe changes, or ask questions..."
+            ></textarea>
+
+            <div class="agent-input-toolbar">
+              <div class="toolbar-left">
+                <div class="model-pill" id="model-selector-pill" title="Select AI Model">
+                  <span id="active-model-name">NVIDIA Llama 3.2 11B</span>
+                  <span style="font-size: 8px;">▼</span>
+                </div>
+              </div>
+
+              <div class="toolbar-right">
+                <button class="submit-btn ready" id="btn-send-prompt" title="Send (Enter)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="agent-disclaimer">
+            AI may make mistakes. Double-check all generated code.
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+  </div>
+
+  <!-- Load Frontend TypeScript Script (ES Module) -->
+  <script type="module" src="dist/main.js"></script>
+</body>
+</html>

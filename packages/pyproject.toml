@@ -1,0 +1,26 @@
+[project]
+name = "code-bud"
+version = "0.1.0"
+description = "A modular AI coding agent with FastAPI backend and web frontend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.0",
+    "groq>=1.7.0",
+    "pydantic-ai>=2.55.0",
+    "uvicorn>=0.54.0",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
