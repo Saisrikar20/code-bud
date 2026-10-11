@@ -84,10 +84,9 @@ code-bud/
 - **Node.js**: (Optional, only needed if rebuilding frontend assets)
 
 ### 1. Installation
-Clone the repository and install dependencies using `uv`:
+Navigate to the project directory and install dependencies using `uv`:
 
 ```bash
-git clone https://github.com/Saisrikar20/code-bud.git
 cd code-bud
 uv sync
 uv pip install -e packages/shared
