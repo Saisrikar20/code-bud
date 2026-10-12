@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Change directory to project root
+cd /d "%~dp0\.."
+
 echo =======================================================
 echo         Code-Bud IDE: Participant Setup Script
 echo =======================================================

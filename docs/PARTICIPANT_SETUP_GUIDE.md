@@ -165,16 +165,16 @@ You can choose between the **Automated Setup** or **Manual Setup**.
 ### Method 1: One-Click Automated Setup (Fastest)
 
 #### On Windows:
-Double-click `setup.bat` (or run it in PowerShell/CMD):
+Double-click `docs\setup.bat` (or run it in PowerShell/CMD):
 ```cmd
-.\setup.bat
+.\docs\setup.bat
 ```
 
 #### On macOS / Linux:
 Run the setup shell script in your terminal:
 ```bash
-chmod +x setup.sh
-./setup.sh
+chmod +x docs/setup.sh
+./docs/setup.sh
 ```
 
 ---

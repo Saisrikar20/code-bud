@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Change directory to project root
+cd "$(dirname "$0")/.."
+
 echo "======================================================="
 echo "       Code-Bud IDE: Participant Setup Script"
 echo "======================================================="
