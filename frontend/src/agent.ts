@@ -491,24 +491,8 @@ export class AgentChat {
   private renderMarkdown(md: string): string {
     if (!md) return '';
 
-    // 1. Extract and preserve code blocks with placeholders
-    const codeBlocks: string[] = [];
-    let processed = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)(?:```|$)/g, (_match, lang, code) => {
-      const language = (lang || 'code').trim();
-      const cleanCode = code.replace(/\n$/, '');
-      const highlighted = this.highlightCode(cleanCode);
-      const index = codeBlocks.length;
-      codeBlocks.push(`
-        <div class="chat-code-block">
-          <div class="chat-code-header">
-            <span class="code-lang-label">${this.escapeHtml(language)}</span>
-            <button class="btn-copy-code">Copy</button>
-          </div>
-          <pre><code>${highlighted}</code></pre>
-        </div>
-      `);
-      return `\n%%CODE_BLOCK_${index}%%\n`;
-    });
+    // 1. Remove code blocks (backtick content ```...```) from chat responses
+    let processed = md.replace(/```[a-zA-Z0-9_-]*\n[\s\S]*?(?:```|$)/g, '').trim();
 
     // 2. Escape HTML for the rest of markdown text
     processed = this.escapeHtml(processed);
@@ -523,13 +507,10 @@ export class AgentChat {
     processed = processed.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
 
     // 6. Convert newlines in regular text to <br>
-    processed = processed.replace(/\n\n+/g, '<br><br>').replace(/\n/g, '<br>');
+    processed = processed.replace(/\n\s*\n+/g, '<br><br>').replace(/\n/g, '<br>');
 
-    // 7. Re-inject code blocks
-    processed = processed.replace(/(?:<br>)*%%CODE_BLOCK_(\d+)%%(?:<br>)*/g, (_match, id) => {
-      const idx = parseInt(id, 10);
-      return codeBlocks[idx] || '';
-    });
+    // 7. Strip leading or trailing <br>
+    processed = processed.replace(/^(?:<br>)+|(?:<br>)+$/g, '');
 
     return processed;
   }

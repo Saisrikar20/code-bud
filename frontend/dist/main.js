@@ -872,34 +872,13 @@
     }
     renderMarkdown(md) {
       if (!md) return "";
-      const codeBlocks = [];
-      let processed = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)(?:```|$)/g, (_match, lang, code) => {
-        const language = (lang || "code").trim();
-        const cleanCode = code.replace(/\n$/, "");
-        const highlighted = this.highlightCode(cleanCode);
-        const index = codeBlocks.length;
-        codeBlocks.push(`
-        <div class="chat-code-block">
-          <div class="chat-code-header">
-            <span class="code-lang-label">${this.escapeHtml(language)}</span>
-            <button class="btn-copy-code">Copy</button>
-          </div>
-          <pre><code>${highlighted}</code></pre>
-        </div>
-      `);
-        return `
-%%CODE_BLOCK_${index}%%
-`;
-      });
+      let processed = md.replace(/```[a-zA-Z0-9_-]*\n[\s\S]*?(?:```|$)/g, "").trim();
       processed = this.escapeHtml(processed);
       processed = processed.replace(/`([^`\n]+)`/g, '<code class="chat-inline-code">$1</code>');
       processed = processed.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
       processed = processed.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
-      processed = processed.replace(/\n\n+/g, "<br><br>").replace(/\n/g, "<br>");
-      processed = processed.replace(/(?:<br>)*%%CODE_BLOCK_(\d+)%%(?:<br>)*/g, (_match, id) => {
-        const idx = parseInt(id, 10);
-        return codeBlocks[idx] || "";
-      });
+      processed = processed.replace(/\n\s*\n+/g, "<br><br>").replace(/\n/g, "<br>");
+      processed = processed.replace(/^(?:<br>)+|(?:<br>)+$/g, "");
       return processed;
     }
     escapeHtml(str) {

@@ -21,14 +21,15 @@ CRITICAL WORKSPACE BEHAVIOR RULES:
    - Then call `edit` (or `write`) to apply the changes directly to the workspace file.
 3. PATH RULES:
    - All paths must be relative to the workspace root directory (e.g. `app.py`, `main.py`). Never use absolute paths.
-4. RESPONSE SUMMARY:
-   - Briefly explain what file you created or modified and what the program does.
-5. RUNNABLE PROGRAMS:
-   - When generating standalone scripts or utilities, always include an executable `if __name__ == "__main__":` test block with informative `print(...)` statements so that executing the script demonstrates working output immediately.
+4. RESPONSE SUMMARY & NO CODE DUMPS:
+   - NEVER repeat or dump code in markdown code blocks (```...```) in your response. The code is already written directly into the file in the workspace via tools, and the UI displays the file action card with line counts.
+   - Keep your text response concise and clean (1-3 sentences) describing what was created or modified and how to use it.
+5. CLEAN SCOPE:
+   - Focus strictly on what the user asks for without unnecessary fluff or redundant boilerplate.
 6. COMPLETE AND STOP:
    - Execute your solution directly without hesitation.
    - Once you call `write` (or `edit`) and receive confirmation, STOP CALLING TOOLS. Do not call `read`, `ls`, or `write` again.
-   - Immediately provide a brief friendly summary of the created file and its usage, then end your response.
+   - Immediately provide a brief friendly summary of the created file and its usage, then end your response. NEVER output the code again in backticks.
 
 Always build real working code and write files into the workspace.
 """
