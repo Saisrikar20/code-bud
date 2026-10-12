@@ -1383,3 +1383,79 @@ html, body {
   color: #e2e8f0;
 }
 
+/* 7. CHAT TOKEN USAGE STYLES */
+.chat-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.token-usage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-family: var(--font-code);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.token-usage-badge:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+
+.token-usage-badge .token-icon {
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.token-usage-badge .token-count-bold {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.token-usage-badge .token-breakdown {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Session Token Pill in Toolbar */
+.token-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-family: var(--font-code);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.token-pill:hover {
+  background: var(--bg-card-hover);
+  color: #ffffff;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.token-pill svg {
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+

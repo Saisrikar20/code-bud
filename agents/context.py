@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 
@@ -22,5 +23,16 @@ class AgentDeps:
 
     @property
     def deps(self) -> str:
-        """Backward compatibility with str cwd dependencies."""
         return self.workspace_dir
+
+def resolve_path(ctx: Any, rel_path: str = ".") -> tuple[str, str] | None:
+    """Resolve target path safely within workspace. Returns (abs_target, abs_workspace) or None."""
+    ws = getattr(ctx, "deps", ctx)
+    ws_dir = os.path.abspath(ws.workspace_dir if isinstance(ws, AgentDeps) else str(ws))
+    target = os.path.normpath(os.path.join(ws_dir, rel_path))
+    try:
+        if os.path.commonpath([target, ws_dir]) == ws_dir:
+            return target, ws_dir
+    except Exception:
+        pass
+    return None

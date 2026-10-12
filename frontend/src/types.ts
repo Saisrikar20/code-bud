@@ -46,8 +46,15 @@ export interface ChatSession {
   updated_at: number;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  requests?: number;
+}
+
 export interface ActivityEvent {
-  type: 'thinking' | 'activity' | 'file_action' | 'chunk' | 'done' | 'error';
+  type: 'thinking' | 'activity' | 'file_action' | 'chunk' | 'done' | 'error' | 'usage';
   status?: string;
   content?: string;
   action?: 'write' | 'edit' | 'read' | 'analyze';
@@ -57,5 +64,6 @@ export interface ActivityEvent {
   detail?: string;
   modified_files?: string[];
   activities?: any[];
+  usage?: TokenUsage;
 }
 

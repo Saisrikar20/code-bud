@@ -1,4 +1,4 @@
-import { FileItem, FileContent, ChatSession, ActivityEvent } from './types';
+import { FileItem, FileContent, ChatSession, ActivityEvent, TokenUsage } from './types';
 
 const API_BASE = '/api';
 
@@ -121,7 +121,8 @@ export interface StreamChatCallbacks {
   onActivity?: (activity: ActivityEvent) => void;
   onFileAction?: (fileAction: ActivityEvent) => void;
   onChunk: (chunk: string) => void;
-  onDone: (data?: { modified_files?: string[]; activities?: any[] }) => void;
+  onUsage?: (usage: TokenUsage) => void;
+  onDone: (data?: { modified_files?: string[]; activities?: any[]; usage?: TokenUsage }) => void;
   onError: (err: string) => void;
 }
 
@@ -175,9 +176,16 @@ export async function streamChat(
               callbacks.onFileAction?.(data);
             } else if (data.type === 'chunk') {
               callbacks.onChunk(data.content);
+            } else if (data.type === 'usage') {
+              if (data.usage) {
+                callbacks.onUsage?.(data.usage);
+              }
             } else if (data.type === 'error') {
               callbacks.onError(data.content);
             } else if (data.type === 'done') {
+              if (data.usage) {
+                callbacks.onUsage?.(data.usage);
+              }
               callbacks.onDone(data);
               return;
             }

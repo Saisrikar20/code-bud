@@ -18,10 +18,17 @@ class ToolCallEvent(BaseModel):
     args: Dict[str, Any]
     output: Optional[str] = None
 
+class TokenUsage(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    requests: int = 1
+
 class ChatResponse(BaseModel):
     response: str
     tool_calls: List[ToolCallEvent] = Field(default_factory=list)
     session_id: str
+    usage: Optional[TokenUsage] = None
 
 class FileItem(BaseModel):
     name: str

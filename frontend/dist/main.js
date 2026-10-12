@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/api.ts
+  // frontend/src/api.ts
   var API_BASE = "/api";
   async function getWorkspaceTree(folder) {
     const url = folder ? `${API_BASE}/files/tree?folder=${encodeURIComponent(folder)}` : `${API_BASE}/files/tree`;
@@ -120,9 +120,16 @@
                 callbacks.onFileAction?.(data);
               } else if (data.type === "chunk") {
                 callbacks.onChunk(data.content);
+              } else if (data.type === "usage") {
+                if (data.usage) {
+                  callbacks.onUsage?.(data.usage);
+                }
               } else if (data.type === "error") {
                 callbacks.onError(data.content);
               } else if (data.type === "done") {
+                if (data.usage) {
+                  callbacks.onUsage?.(data.usage);
+                }
                 callbacks.onDone(data);
                 return;
               }
@@ -138,7 +145,7 @@
     }
   }
 
-  // src/explorer.ts
+  // frontend/src/explorer.ts
   var FileExplorer = class {
     container;
     chatsContainer;
@@ -465,7 +472,7 @@
     }
   };
 
-  // src/agent.ts
+  // frontend/src/agent.ts
   var AgentChat = class {
     explorer;
     messagesContainer;
@@ -480,6 +487,7 @@
     activeChat = null;
     history = [];
     isGenerating = false;
+    sessionTotalTokens = 0;
     constructor(explorer) {
       this.explorer = explorer;
       this.messagesContainer = document.getElementById("chat-messages");
@@ -497,6 +505,8 @@
     async switchChat(chat) {
       this.activeChat = chat;
       this.history = [];
+      this.sessionTotalTokens = 0;
+      this.updateSessionTokensDisplay();
       this.messagesContainer.innerHTML = "";
       const agentWorkspace = document.querySelector(".agent-workspace-title");
       if (agentWorkspace) {
@@ -561,10 +571,45 @@
           mdDiv.className = "assistant-markdown-content";
           mdDiv.innerHTML = this.renderMarkdown(msg.content);
           assistantBubble.appendChild(mdDiv);
+          if (msg.usage) {
+            const metaBar = document.createElement("div");
+            metaBar.className = "chat-meta-bar";
+            metaBar.appendChild(this.createTokenBadge(msg.usage));
+            assistantBubble.appendChild(metaBar);
+            this.accumulateSessionTokens(msg.usage);
+          }
           this.messagesContainer.appendChild(assistantBubble);
         }
       }
       this.scrollToBottom();
+    }
+    createTokenBadge(usage) {
+      const badge = document.createElement("div");
+      badge.className = "token-usage-badge";
+      const inTokens = (usage.input_tokens || 0).toLocaleString();
+      const outTokens = (usage.output_tokens || 0).toLocaleString();
+      const totalTokens = (usage.total_tokens || (usage.input_tokens || 0) + (usage.output_tokens || 0)).toLocaleString();
+      badge.title = `Prompt: ${inTokens} tokens | Completion: ${outTokens} tokens | Total: ${totalTokens} tokens`;
+      badge.innerHTML = `
+      <svg class="token-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+      </svg>
+      <span class="token-count-bold">${totalTokens} tokens</span>
+      <span class="token-breakdown">(${inTokens} in &middot; ${outTokens} out)</span>
+    `;
+      return badge;
+    }
+    accumulateSessionTokens(usage) {
+      const turnTotal = usage.total_tokens || (usage.input_tokens || 0) + (usage.output_tokens || 0);
+      this.sessionTotalTokens += turnTotal;
+      this.updateSessionTokensDisplay();
+    }
+    updateSessionTokensDisplay() {
+      const pill = document.getElementById("session-tokens-counter");
+      if (pill) {
+        pill.textContent = `${this.sessionTotalTokens.toLocaleString()} tokens`;
+        pill.title = `Cumulative tokens in session: ${this.sessionTotalTokens.toLocaleString()} tokens`;
+      }
     }
     async initModels() {
       try {
@@ -720,6 +765,10 @@
       const contentDiv = document.createElement("div");
       contentDiv.className = "assistant-markdown-content";
       assistantBubble.appendChild(contentDiv);
+      const metaBar = document.createElement("div");
+      metaBar.className = "chat-meta-bar";
+      metaBar.style.display = "none";
+      assistantBubble.appendChild(metaBar);
       this.messagesContainer.appendChild(assistantBubble);
       this.scrollToBottom();
       const startTime = performance.now();
@@ -731,8 +780,17 @@
         if (timerSpan) timerSpan.textContent = `${elapsed}s`;
       }, 100);
       let fullResponse = "";
+      let turnUsage = null;
       const collectedActivities = [];
       const collectedFileActions = [];
+      const displayTokenUsage = (usage) => {
+        turnUsage = usage;
+        metaBar.innerHTML = "";
+        metaBar.appendChild(this.createTokenBadge(usage));
+        metaBar.style.display = "flex";
+        this.accumulateSessionTokens(usage);
+        this.scrollToBottom();
+      };
       const appendThinkingStep = (text2) => {
         const step = document.createElement("div");
         step.className = "thinking-step";
@@ -781,6 +839,11 @@
             contentDiv.innerHTML = this.renderMarkdown(fullResponse);
             this.scrollToBottom();
           },
+          onUsage: (usage) => {
+            if (!turnUsage) {
+              displayTokenUsage(usage);
+            }
+          },
           onDone: async (data) => {
             clearInterval(timerInterval);
             this.isGenerating = false;
@@ -788,12 +851,25 @@
             if (timerSpan) timerSpan.textContent = `${totalTime}s`;
             if (labelSpan) labelSpan.textContent = `Thought for ${totalTime}s`;
             if (pulseDot) pulseDot.style.background = "#10b981";
+            if (data?.usage && !turnUsage) {
+              displayTokenUsage(data.usage);
+            } else if (!turnUsage) {
+              const estIn = Math.max(1, Math.round(text.length / 4));
+              const estOut = Math.max(1, Math.round(fullResponse.length / 4));
+              displayTokenUsage({
+                input_tokens: estIn,
+                output_tokens: estOut,
+                total_tokens: estIn + estOut,
+                requests: 1
+              });
+            }
             this.history.push({
               role: "assistant",
               content: fullResponse,
               thought_time: `Thought for ${totalTime}s`,
               activities: collectedActivities,
-              file_actions: collectedFileActions
+              file_actions: collectedFileActions,
+              usage: turnUsage || void 0
             });
             try {
               await saveChatHistory(activeChatId, this.history);
@@ -862,7 +938,7 @@
     }
   };
 
-  // src/resizer.ts
+  // frontend/src/resizer.ts
   function setupResizers() {
     const sidebar = document.getElementById("sidebar-explorer");
     const resizerSidebar = document.getElementById("resizer-sidebar");
@@ -890,7 +966,7 @@
     }
   }
 
-  // src/main.ts
+  // frontend/src/main.ts
   document.addEventListener("DOMContentLoaded", () => {
     setupResizers();
     const explorer = new FileExplorer("file-tree-root");

@@ -1,86 +1,50 @@
 import os
+import re
+import fnmatch
 import shutil
 import asyncio
 from pydantic_ai import RunContext
-from ..context import AgentDeps
-from .ls import _get_workspace
+from ..context import AgentDeps, resolve_path
 
-async def grep(
-    ctx: RunContext[AgentDeps],
-    pattern: str,
-    glob: str | None = None,
-    ignore_case: bool = True,
-) -> str:
-    """
-    Search for a text pattern in files across the workspace using ripgrep or python fallback.
+async def grep(ctx: RunContext[AgentDeps], pattern: str, glob: str | None = None, ignore_case: bool = True) -> str:
+    """Search for a text pattern in files across the workspace."""
+    resolved = resolve_path(ctx, ".")
+    if not resolved:
+        return "Error: Workspace path invalid"
+    _, ws = resolved
 
-    Args:
-        pattern: The regular expression or text to search for.
-        glob: Optional file glob pattern to limit the search (e.g. '*.py', '*.ts').
-        ignore_case: Whether to perform case-insensitive search (default True).
-
-    Returns:
-        Matches formatted with file paths and line numbers.
-    """
-    workspace = _get_workspace(ctx)
-    rg_path = shutil.which("rg")
-
-    if rg_path:
-        cmd = ["rg", "--line-number"]
-        if ignore_case:
-            cmd.append("--ignore-case")
-        if glob:
-            cmd.extend(["--glob", glob])
-        cmd.extend([pattern, "."])
-
+    # 1. Try ripgrep if installed
+    if shutil.which("rg"):
+        cmd = ["rg", "--line-number", *(["--ignore-case"] if ignore_case else []), *(["--glob", glob] if glob else []), pattern, "."]
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=workspace,
-            )
-            stdout, stderr = await process.communicate()
-            output = stdout.decode("utf-8", errors="replace")
-            if not output:
-                return f"No matches found for '{pattern}'"
-            lines = output.splitlines()
-            if len(lines) > 100:
-                return "\n".join(lines[:100]) + f"\n\n[Truncated {len(lines) - 100} additional matches]"
-            return output
-        except Exception as e:
-            return f"Error executing ripgrep: {e}"
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=ws)
+            out, _ = await proc.communicate()
+            lines = out.decode("utf-8", errors="replace").splitlines()
+            return "\n".join(lines[:100]) + (f"\n\n[Truncated {len(lines)-100} matches]" if len(lines) > 100 else "") if lines else f"No matches found for '{pattern}'"
+        except Exception:
+            pass
 
-    # Pure Python fallback if rg is not available on system
-    matches = []
-    import fnmatch
-    import re
-
-    regex_flags = re.IGNORECASE if ignore_case else 0
+    # 2. Pure Python fallback
     try:
-        compiled = re.compile(pattern, regex_flags)
+        compiled = re.compile(pattern, re.IGNORECASE if ignore_case else 0)
     except Exception as e:
         return f"Invalid regex pattern: {e}"
 
-    for root, dirs, files in os.walk(workspace):
-        # Exclude common large folders
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "__pycache__", "dist", "build"}]
-        for file in files:
-            if glob and not fnmatch.fnmatch(file, glob):
+    matches = []
+    for root, dirs, files in os.walk(ws):
+        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "__pycache__", "dist"}]
+        for f in files:
+            if glob and not fnmatch.fnmatch(f, glob):
                 continue
-            rel_root = os.path.relpath(root, workspace)
-            rel_file = os.path.normpath(os.path.join(rel_root, file))
-            file_full = os.path.join(root, file)
+            fpath, rel = os.path.join(root, f), os.path.relpath(os.path.join(root, f), ws).replace("\\", "/")
             try:
-                with open(file_full, "r", encoding="utf-8", errors="ignore") as f:
-                    for i, line in enumerate(f, 1):
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as file_obj:
+                    for i, line in enumerate(file_obj, 1):
                         if compiled.search(line):
-                            matches.append(f"{rel_file}:{i}:{line.rstrip()}")
+                            matches.append(f"{rel}:{i}:{line.rstrip()}")
                             if len(matches) >= 100:
-                                return "\n".join(matches) + "\n\n[Truncated: 100+ matches found]"
+                                return "\n".join(matches) + "\n\n[Truncated: 100+ matches]"
             except Exception:
-                continue
+                pass
 
-    if not matches:
-        return f"No matches found for '{pattern}'"
-    return "\n".join(matches)
+    return "\n".join(matches) if matches else f"No matches found for '{pattern}'"

@@ -1,42 +1,22 @@
 import os
 import difflib
 from pydantic_ai import RunContext
-from ..context import AgentDeps
-from .ls import _get_workspace
+from ..context import AgentDeps, resolve_path
 
 def edit(ctx: RunContext[AgentDeps], file_path: str, old_string: str, new_string: str) -> str:
-    """
-    Replace an exact text block in a file with new text.
-    For safety, old_string must appear exactly once in the file.
-
-    Args:
-        file_path: Relative path to the file.
-        old_string: Exact existing text to replace.
-        new_string: New text to put in its place.
-
-    Returns:
-        Unified diff of changes applied, or error description.
-    """
+    """Replace an exact text block in a file with new text. old_string must appear exactly once."""
     if old_string == new_string:
         return "Error: old_string and new_string cannot be identical"
 
-    workspace = _get_workspace(ctx)
-    abs_path = os.path.abspath(workspace)
-    full_path = os.path.join(abs_path, file_path)
-    target_path = os.path.normpath(full_path)
-
-    try:
-        valid = os.path.commonpath([target_path, abs_path]) == abs_path
-    except (ValueError, Exception):
-        valid = False
-
-    if not valid:
-        return f'Error: Cannot edit "{file_path}" as it is outside the workspace'
-    if not os.path.isfile(target_path):
+    resolved = resolve_path(ctx, file_path)
+    if not resolved:
+        return f'Error: Cannot edit "{file_path}" outside the workspace'
+    target, ws = resolved
+    if not os.path.isfile(target):
         return f'Error: File "{file_path}" does not exist'
 
     try:
-        with open(target_path, "r", encoding="utf-8") as f:
+        with open(target, "r", encoding="utf-8") as f:
             content = f.read()
 
         count = content.count(old_string)
@@ -45,40 +25,22 @@ def edit(ctx: RunContext[AgentDeps], file_path: str, old_string: str, new_string
         if count > 1:
             return f"Error: Multiple matches ({count}) found for old_string in '{file_path}'. Please provide more surrounding context."
 
-        start = content.find(old_string)
-        end = start + len(old_string)
-        new_content = content[:start] + new_string + content[end:]
-
-        with open(target_path, "w", encoding="utf-8") as f:
+        new_content = content.replace(old_string, new_string, 1)
+        with open(target, "w", encoding="utf-8") as f:
             f.write(new_content)
 
-        clean_rel = os.path.relpath(target_path, abs_path).replace("\\", "/")
-        new_lines_count = len(new_string.splitlines())
-        old_lines_count = len(old_string.splitlines())
-
-        if hasattr(ctx.deps, "modified_files"):
-            if clean_rel not in ctx.deps.modified_files:
-                ctx.deps.modified_files.append(clean_rel)
-
+        rel = os.path.relpath(target, ws).replace("\\", "/")
+        new_lines, old_lines = len(new_string.splitlines()), len(old_string.splitlines())
+        if hasattr(ctx.deps, "modified_files") and rel not in ctx.deps.modified_files:
+            ctx.deps.modified_files.append(rel)
         if hasattr(ctx.deps, "record_activity"):
             ctx.deps.record_activity({
-                "type": "file_action",
-                "action": "edit",
-                "file": clean_rel,
-                "lines": new_lines_count,
-                "old_lines": old_lines_count,
-                "detail": f"Edited {clean_rel} (replaced {old_lines_count} lines with {new_lines_count} lines)"
+                "type": "file_action", "action": "edit", "file": rel,
+                "lines": new_lines, "old_lines": old_lines,
+                "detail": f"Edited {rel} (replaced {old_lines} lines with {new_lines} lines)"
             })
 
-        diff = "\n".join(
-            difflib.unified_diff(
-                content.splitlines(),
-                new_content.splitlines(),
-                fromfile=f"a/{file_path}",
-                tofile=f"b/{file_path}",
-                lineterm="",
-            )
-        )
+        diff = "\n".join(difflib.unified_diff(content.splitlines(), new_content.splitlines(), fromfile=f"a/{file_path}", tofile=f"b/{file_path}", lineterm=""))
         return f"Successfully edited '{file_path}':\n{diff}"
     except Exception as e:
         return f"Error editing '{file_path}': {e}"

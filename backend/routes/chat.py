@@ -5,13 +5,34 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart
 from pydantic_ai.usage import UsageLimits
-from shared.models import ChatRequest, ChatResponse, ToolCallEvent
+from shared.models import ChatRequest, ChatResponse, ToolCallEvent, TokenUsage
 from shared.config import load_config
 from agents.core import create_agent
 from agents.context import AgentDeps
 from ..dependencies import get_agent_deps
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+def extract_usage(run_result_or_stream) -> TokenUsage:
+    """Safely extracts token usage metrics from Pydantic AI run results or streams."""
+    try:
+        usage = getattr(run_result_or_stream, "usage", None)
+        if callable(usage):
+            usage = usage()
+        if usage is not None:
+            inp = getattr(usage, "input_tokens", 0) or 0
+            out = getattr(usage, "output_tokens", 0) or 0
+            tot = getattr(usage, "total_tokens", 0) or (inp + out)
+            reqs = getattr(usage, "requests", 1) or 1
+            return TokenUsage(
+                input_tokens=int(inp),
+                output_tokens=int(out),
+                total_tokens=int(tot),
+                requests=int(reqs),
+            )
+    except Exception:
+        pass
+    return TokenUsage(input_tokens=0, output_tokens=0, total_tokens=0, requests=1)
 
 @router.get("/models")
 async def list_models():
@@ -49,10 +70,12 @@ async def chat_endpoint(req: ChatRequest):
         )
 
         resp_text = getattr(result, "output", getattr(result, "data", str(result)))
+        usage_data = extract_usage(result)
         return ChatResponse(
             response=str(resp_text),
             tool_calls=[],
             session_id=req.session_id or "default",
+            usage=usage_data,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -104,8 +127,12 @@ async def chat_stream_endpoint(req: ChatRequest):
                 act = queue.get_nowait()
                 yield f"data: {json.dumps(act)}\n\n"
 
+            usage_obj = extract_usage(stream)
+            usage_dict = usage_obj.model_dump() if hasattr(usage_obj, "model_dump") else usage_obj.dict()
+            yield f"data: {json.dumps({'type': 'usage', 'usage': usage_dict})}\n\n"
+
             modified = list(dict.fromkeys(getattr(deps, "modified_files", [])))
-            yield f"data: {json.dumps({'type': 'done', 'modified_files': modified, 'activities': deps.activities})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'modified_files': modified, 'activities': deps.activities, 'usage': usage_dict})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 

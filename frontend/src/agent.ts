@@ -1,4 +1,4 @@
-import { ChatMessage, ChatSession, ActivityEvent } from './types';
+import { ChatMessage, ChatSession, ActivityEvent, TokenUsage } from './types';
 import { streamChat, getModels, getChatDetails, saveChatHistory, createChat } from './api';
 import { FileExplorer } from './explorer';
 
@@ -8,6 +8,7 @@ interface StoredMessage {
   thought_time?: string;
   activities?: ActivityEvent[];
   file_actions?: ActivityEvent[];
+  usage?: TokenUsage;
 }
 
 export class AgentChat {
@@ -25,6 +26,7 @@ export class AgentChat {
   private activeChat: ChatSession | null = null;
   private history: StoredMessage[] = [];
   private isGenerating = false;
+  private sessionTotalTokens = 0;
 
   constructor(explorer?: FileExplorer) {
     this.explorer = explorer;
@@ -46,6 +48,8 @@ export class AgentChat {
   async switchChat(chat: ChatSession): Promise<void> {
     this.activeChat = chat;
     this.history = [];
+    this.sessionTotalTokens = 0;
+    this.updateSessionTokensDisplay();
     this.messagesContainer.innerHTML = '';
 
     // Update title banner if applicable
@@ -122,10 +126,51 @@ export class AgentChat {
         mdDiv.innerHTML = this.renderMarkdown(msg.content);
         assistantBubble.appendChild(mdDiv);
 
+        // Render token usage badge in footer if present
+        if (msg.usage) {
+          const metaBar = document.createElement('div');
+          metaBar.className = 'chat-meta-bar';
+          metaBar.appendChild(this.createTokenBadge(msg.usage));
+          assistantBubble.appendChild(metaBar);
+          this.accumulateSessionTokens(msg.usage);
+        }
+
         this.messagesContainer.appendChild(assistantBubble);
       }
     }
     this.scrollToBottom();
+  }
+
+  private createTokenBadge(usage: TokenUsage): HTMLElement {
+    const badge = document.createElement('div');
+    badge.className = 'token-usage-badge';
+    const inTokens = (usage.input_tokens || 0).toLocaleString();
+    const outTokens = (usage.output_tokens || 0).toLocaleString();
+    const totalTokens = (usage.total_tokens || ((usage.input_tokens || 0) + (usage.output_tokens || 0))).toLocaleString();
+
+    badge.title = `Prompt: ${inTokens} tokens | Completion: ${outTokens} tokens | Total: ${totalTokens} tokens`;
+    badge.innerHTML = `
+      <svg class="token-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+      </svg>
+      <span class="token-count-bold">${totalTokens} tokens</span>
+      <span class="token-breakdown">(${inTokens} in &middot; ${outTokens} out)</span>
+    `;
+    return badge;
+  }
+
+  private accumulateSessionTokens(usage: TokenUsage): void {
+    const turnTotal = usage.total_tokens || ((usage.input_tokens || 0) + (usage.output_tokens || 0));
+    this.sessionTotalTokens += turnTotal;
+    this.updateSessionTokensDisplay();
+  }
+
+  private updateSessionTokensDisplay(): void {
+    const pill = document.getElementById('session-tokens-counter');
+    if (pill) {
+      pill.textContent = `${this.sessionTotalTokens.toLocaleString()} tokens`;
+      pill.title = `Cumulative tokens in session: ${this.sessionTotalTokens.toLocaleString()} tokens`;
+    }
   }
 
   private async initModels(): Promise<void> {
@@ -305,6 +350,12 @@ export class AgentChat {
     contentDiv.className = 'assistant-markdown-content';
     assistantBubble.appendChild(contentDiv);
 
+    // 6. Token usage meta bar
+    const metaBar = document.createElement('div');
+    metaBar.className = 'chat-meta-bar';
+    metaBar.style.display = 'none';
+    assistantBubble.appendChild(metaBar);
+
     this.messagesContainer.appendChild(assistantBubble);
     this.scrollToBottom();
 
@@ -320,8 +371,18 @@ export class AgentChat {
     }, 100);
 
     let fullResponse = '';
+    let turnUsage: TokenUsage | null = null;
     const collectedActivities: ActivityEvent[] = [];
     const collectedFileActions: ActivityEvent[] = [];
+
+    const displayTokenUsage = (usage: TokenUsage) => {
+      turnUsage = usage;
+      metaBar.innerHTML = '';
+      metaBar.appendChild(this.createTokenBadge(usage));
+      metaBar.style.display = 'flex';
+      this.accumulateSessionTokens(usage);
+      this.scrollToBottom();
+    };
 
     const appendThinkingStep = (text: string) => {
       const step = document.createElement('div');
@@ -376,6 +437,11 @@ export class AgentChat {
           contentDiv.innerHTML = this.renderMarkdown(fullResponse);
           this.scrollToBottom();
         },
+        onUsage: (usage: TokenUsage) => {
+          if (!turnUsage) {
+            displayTokenUsage(usage);
+          }
+        },
         onDone: async (data) => {
           clearInterval(timerInterval);
           this.isGenerating = false;
@@ -385,6 +451,20 @@ export class AgentChat {
           if (labelSpan) labelSpan.textContent = `Thought for ${totalTime}s`;
           if (pulseDot) pulseDot.style.background = '#10b981'; // Green completed dot
 
+          if (data?.usage && !turnUsage) {
+            displayTokenUsage(data.usage);
+          } else if (!turnUsage) {
+            // Sensible fallback estimate if provider returned 0 tokens
+            const estIn = Math.max(1, Math.round(text.length / 4));
+            const estOut = Math.max(1, Math.round(fullResponse.length / 4));
+            displayTokenUsage({
+              input_tokens: estIn,
+              output_tokens: estOut,
+              total_tokens: estIn + estOut,
+              requests: 1,
+            });
+          }
+
           // Add to history and persist
           this.history.push({
             role: 'assistant',
@@ -392,6 +472,7 @@ export class AgentChat {
             thought_time: `Thought for ${totalTime}s`,
             activities: collectedActivities,
             file_actions: collectedFileActions,
+            usage: turnUsage || undefined,
           });
 
           // Save chat history to backend
