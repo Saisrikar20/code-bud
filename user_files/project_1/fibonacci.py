@@ -9,6 +9,3 @@ def fibonacci(n: int) -> list[int]:
     while len(sequence) < n:
         sequence.append(sequence[-1] + sequence[-2])
     return sequence
-
-if __name__ == "__main__":
-    print("Fibonacci(10):", fibonacci(10))

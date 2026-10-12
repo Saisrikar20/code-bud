@@ -840,25 +840,67 @@
     `;
       return card;
     }
+    highlightCode(rawCode) {
+      const tokenRegex = /(#[^\n]*|\/\/[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b(def|class|return|if|else|elif|import|from|as|while|for|in|try|except|finally|with|async|await|const|let|var|function)\b|\b(RunContext|AgentDeps|Agent|Tool|str|int|bool|list|dict|bytes|float|tuple|set|Any|Optional)\b|\b([a-zA-Z_]\w*)(?=\s*\()/g;
+      let lastIndex = 0;
+      let result = "";
+      let match;
+      while ((match = tokenRegex.exec(rawCode)) !== null) {
+        if (match.index > lastIndex) {
+          result += this.escapeHtml(rawCode.slice(lastIndex, match.index));
+        }
+        const [fullMatch, comment, str, kw, type, fn] = match;
+        if (comment) {
+          result += `<span class="syn-comment">${this.escapeHtml(comment)}</span>`;
+        } else if (str) {
+          result += `<span class="syn-str">${this.escapeHtml(str)}</span>`;
+        } else if (kw) {
+          result += `<span class="syn-kw">${this.escapeHtml(kw)}</span>`;
+        } else if (type) {
+          result += `<span class="syn-type">${this.escapeHtml(type)}</span>`;
+        } else if (fn) {
+          result += `<span class="syn-fn">${this.escapeHtml(fn)}</span>`;
+        } else {
+          result += this.escapeHtml(fullMatch);
+        }
+        lastIndex = match.index + fullMatch.length;
+      }
+      if (lastIndex < rawCode.length) {
+        result += this.escapeHtml(rawCode.slice(lastIndex));
+      }
+      return result;
+    }
     renderMarkdown(md) {
-      let html = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-        const language = lang || "code";
-        const coloredCode = code.replace(/\b(def|class|return|if|else|elif|import|from|as|while|for|in|try|except|finally|with|async|await|const|let|var|function)\b/g, '<span class="syn-kw">$1</span>').replace(/\b(RunContext|AgentDeps|Agent|Tool|str|int|bool|list|dict|bytes)\b/g, '<span class="syn-type">$1</span>').replace(/("[^"\n]*"|'[^'\n]*')/g, '<span class="syn-str">$1</span>').replace(/(#.*$|\/\/.*$)/gm, '<span class="syn-comment">$1</span>').replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g, '<span class="syn-fn">$1</span>');
-        return `
+      if (!md) return "";
+      const codeBlocks = [];
+      let processed = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)(?:```|$)/g, (_match, lang, code) => {
+        const language = (lang || "code").trim();
+        const cleanCode = code.replace(/\n$/, "");
+        const highlighted = this.highlightCode(cleanCode);
+        const index = codeBlocks.length;
+        codeBlocks.push(`
         <div class="chat-code-block">
           <div class="chat-code-header">
-            <span class="code-lang-label">${language}</span>
+            <span class="code-lang-label">${this.escapeHtml(language)}</span>
             <button class="btn-copy-code">Copy</button>
           </div>
-          <pre><code>${coloredCode}</code></pre>
+          <pre><code>${highlighted}</code></pre>
         </div>
-      `;
+      `);
+        return `
+%%CODE_BLOCK_${index}%%
+`;
       });
-      html = html.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
-      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      html = html.replace(/\n\n/g, "<br><br>");
-      return html;
+      processed = this.escapeHtml(processed);
+      processed = processed.replace(/`([^`\n]+)`/g, '<code class="chat-inline-code">$1</code>');
+      processed = processed.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      processed = processed.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
+      processed = processed.replace(/\n\n+/g, "<br><br>").replace(/\n/g, "<br>");
+      processed = processed.replace(/(?:<br>)*%%CODE_BLOCK_(\d+)%%(?:<br>)*/g, (_match, id) => {
+        const idx = parseInt(id, 10);
+        return codeBlocks[idx] || "";
+      });
+      return processed;
     }
     escapeHtml(str) {
       return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
