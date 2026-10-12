@@ -4,11 +4,11 @@ import { getWorkspaceTree, getWorkspaceInfo, createItem, deleteItem } from './ap
 export class FileExplorer {
   private container: HTMLElement;
   private headerTitle: HTMLElement | null;
-  private onFileSelect: (path: string, name: string) => void;
+  private onFileSelect?: (path: string, name: string) => void;
   private onFileDeleted?: (path: string) => void;
   private activePath: string | null = null;
 
-  constructor(containerId: string, onFileSelect: (path: string, name: string) => void) {
+  constructor(containerId: string, onFileSelect?: (path: string, name: string) => void) {
     this.container = document.getElementById(containerId) as HTMLElement;
     this.headerTitle = document.getElementById('workspace-folder-name');
     this.onFileSelect = onFileSelect;
@@ -63,7 +63,7 @@ export class FileExplorer {
         try {
           await createItem(filename, false);
           await this.init();
-          this.onFileSelect(filename, filename);
+          this.onFileSelect?.(filename, filename);
         } catch (err: any) {
           alert('Error creating file: ' + err.message);
         }
@@ -213,7 +213,7 @@ export class FileExplorer {
       node.addEventListener('click', (e) => {
         e.stopPropagation();
         this.setActive(item.path);
-        this.onFileSelect(item.path, item.name);
+        this.onFileSelect?.(item.path, item.name);
       });
     }
 

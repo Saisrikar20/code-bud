@@ -24,51 +24,6 @@ export async function saveFile(path: string, content: string): Promise<any> {
   return res.json();
 }
 
-export async function runFile(path: string): Promise<{
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-  duration_seconds: number;
-  path: string;
-}> {
-  const res = await fetch(`${API_BASE}/files/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-  if (!res.ok) throw new Error(`Failed to execute ${path}`);
-  return res.json();
-}
-
-export async function runFileInTerminal(path: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/files/run-terminal`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-  if (!res.ok) throw new Error(`Failed to launch terminal for ${path}`);
-  return res.json();
-}
-
-export async function validateCodeBackend(path: string, content: string): Promise<{
-  valid: boolean;
-  errors: number;
-  warnings: number;
-  details: string[];
-}> {
-  try {
-    const res = await fetch(`${API_BASE}/files/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, content }),
-    });
-    if (!res.ok) return { valid: true, errors: 0, warnings: 0, details: [] };
-    return res.json();
-  } catch {
-    return { valid: true, errors: 0, warnings: 0, details: [] };
-  }
-}
-
 export async function getWorkspaceInfo(): Promise<{
   workspace_root: string;
   name: string;
@@ -111,15 +66,6 @@ export async function getModels(): Promise<{ current: string; models: string[] }
       ],
     };
   }
-  return res.json();
-}
-
-export async function runTerminal(command: string): Promise<{ stdout: string; stderr: string; exit_code: number }> {
-  const res = await fetch(`${API_BASE}/terminal/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command }),
-  });
   return res.json();
 }
 

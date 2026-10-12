@@ -1,10 +1,8 @@
 import { ChatMessage } from './types';
 import { streamChat, getModels } from './api';
-import { CodeEditor } from './editor';
 import { FileExplorer } from './explorer';
 
 export class AgentChat {
-  private editor?: CodeEditor;
   private explorer?: FileExplorer;
   private messagesContainer: HTMLElement;
   private promptInput: HTMLTextAreaElement;
@@ -19,8 +17,7 @@ export class AgentChat {
   private history: Array<{ role: string; content: string }> = [];
   private isGenerating = false;
 
-  constructor(editor?: CodeEditor, explorer?: FileExplorer) {
-    this.editor = editor;
+  constructor(explorer?: FileExplorer) {
     this.explorer = explorer;
     this.messagesContainer = document.getElementById('chat-messages') as HTMLElement;
     this.promptInput = document.getElementById('agent-prompt-input') as HTMLTextAreaElement;
@@ -95,23 +92,9 @@ export class AgentChat {
       `;
     });
 
-    // Handle code block action buttons (Open in Editor & Copy)
+    // Handle code block action buttons (Copy)
     this.messagesContainer.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
-      const openBtn = target.closest('.btn-open-in-editor') as HTMLElement;
-      if (openBtn) {
-        const block = openBtn.closest('.chat-code-block');
-        const codeEl = block?.querySelector('pre code');
-        const rawCode = codeEl?.textContent || '';
-        const lang = openBtn.dataset.lang || 'python';
-        const ext = lang.toLowerCase() === 'python' ? 'py' : (lang.toLowerCase() === 'typescript' ? 'ts' : (lang.toLowerCase() === 'javascript' ? 'js' : 'py'));
-        const filename = `program.${ext}`;
-        if (this.editor) {
-          this.editor.openSnippet(filename, rawCode);
-        }
-        return;
-      }
-
       const copyBtn = target.closest('.btn-copy-code') as HTMLElement;
       if (copyBtn) {
         const block = copyBtn.closest('.chat-code-block');
@@ -210,21 +193,9 @@ export class AgentChat {
           await this.explorer.init();
         }
 
-        // Auto-open created or modified files in working area editor!
-        if (data?.modified_files && data.modified_files.length > 0 && this.editor) {
-          for (const filePath of data.modified_files) {
-            const fileName = filePath.split('/').pop() || filePath;
-            await this.editor.openFile(filePath, fileName);
-          }
-        } else if (this.editor) {
-          // If no file was created on disk, but a code block was generated,
-          // and the working area is currently empty, automatically open it!
-          const codeMatch = fullResponse.match(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/);
-          if (codeMatch && !this.editor.getActiveTabId()) {
-            const lang = (codeMatch[1] || 'python').toLowerCase();
-            const ext = lang === 'python' ? 'py' : (lang === 'typescript' ? 'ts' : (lang === 'javascript' ? 'js' : 'py'));
-            await this.editor.openSnippet(`program.${ext}`, codeMatch[2].trim());
-          }
+        // Refresh file explorer if files were modified
+        if (data?.modified_files && data.modified_files.length > 0 && this.explorer) {
+          await this.explorer.init();
         }
       },
       (err: string) => {
@@ -245,7 +216,7 @@ export class AgentChat {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    // Code blocks with curved SaaS container, language badge, and Open in Editor / Copy buttons
+    // Code blocks with curved SaaS container, language badge, and Copy button
     html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, lang, code) => {
       const language = lang || 'code';
       const coloredCode = code
@@ -260,9 +231,6 @@ export class AgentChat {
           <div style="display:flex; justify-content:space-between; align-items:center; background:#121212; padding:5px 12px; font-size:11px; color:#a3a3a3; border-bottom:1px solid rgba(255,255,255,0.08); font-family:var(--font-code);">
             <span style="font-weight:600; color:#e2e8f0;">${language}</span>
             <div style="display:flex; gap:6px; align-items:center;">
-              <button class="btn-open-in-editor" data-lang="${language}" title="Open in Code Editor Working Area" style="background:#1e1e1e; border:1px solid rgba(255,255,255,0.22); color:#ffffff; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.15s ease;">
-                <span>▶ Open in Editor</span>
-              </button>
               <button class="btn-copy-code" style="background:#181818; border:1px solid rgba(255,255,255,0.15); color:#a3a3a3; padding:2px 8px; border-radius:10px; font-size:10px; cursor:pointer;">
                 Copy
               </button>

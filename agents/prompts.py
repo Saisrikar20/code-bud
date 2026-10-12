@@ -15,7 +15,7 @@ CRITICAL WORKSPACE BEHAVIOR RULES:
 1. CREATING CODE: When the user asks you to write, build, generate, or create a program, script, function, or feature:
    - YOU MUST call the `write` tool to create the actual file in the workspace (e.g. `main.py`, `app.py`, `calculator.py`, or appropriate filename).
    - The `content` parameter MUST contain the FULL, complete source code from start to finish (e.g. `content='print("Hello, World!")\n'`). NEVER pass partial, truncated code, or incomplete syntax.
-   - Calling `write` saves the file in the workspace and immediately opens it in the user's working area code editor!
+   - Calling `write` saves the file in the workspace and immediately updates the user's workspace file tree!
 2. MODIFYING CODE:
    - When the user asks to change, fix, or update a file, first call `read` if needed to inspect its contents.
    - Then call `edit` (or `write`) to apply the changes directly to the workspace file.
@@ -24,7 +24,7 @@ CRITICAL WORKSPACE BEHAVIOR RULES:
 4. RESPONSE SUMMARY:
    - Briefly explain what file you created or modified and what the program does.
 5. RUNNABLE PROGRAMS:
-   - When generating standalone scripts or utilities, always include an executable `if __name__ == "__main__":` test block with informative `print(...)` statements so that clicking the "Run" button in the editor demonstrates working output immediately.
+   - When generating standalone scripts or utilities, always include an executable `if __name__ == "__main__":` test block with informative `print(...)` statements so that executing the script demonstrates working output immediately.
 6. COMPLETE AND STOP:
    - Execute your solution directly without hesitation.
    - Once you call `write` (or `edit`) and receive confirmation, STOP CALLING TOOLS. Do not call `read`, `ls`, or `write` again.

@@ -22,15 +22,12 @@
       </div>
 
       <div class="titlebar-center">
-        <span id="window-title-project">workspace</span> - <span class="active-file-title" id="window-title-file">DEVs IDE</span>
+        <span id="window-title-project">workspace</span> - <span class="active-file-title" id="window-title-file">AI Agent Workspace</span>
       </div>
 
       <div class="titlebar-right">
         <div class="action-icon" title="Toggle Explorer (Sidebar)" id="btn-toggle-sidebar">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v10H2V3zm1 1v8h4V4H3zm5 0v8h5V4H8z"/></svg>
-        </div>
-        <div class="action-icon" title="Toggle DEVs Agent" id="btn-toggle-agent">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v10H2V3zm1 1v8h7V4H3zm8 0v8h2V4h-2z"/></svg>
         </div>
       </div>
     </header>
@@ -73,75 +70,14 @@
       <!-- RESIZER: SIDEBAR -->
       <div class="resizer" id="resizer-sidebar" title="Drag to resize Explorer"></div>
 
-      <!-- MAIN CODE EDITOR -->
-      <main class="editor-container">
-        <!-- Editor Tabs -->
-        <div class="editor-tabbar" id="editor-tabs">
-          <!-- Injected dynamically by editor.ts -->
-        </div>
-
-        <!-- Breadcrumbs & Actions -->
-        <div class="breadcrumbs-container" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border-bottom:1px solid var(--border-subtle); padding:0 12px; height:28px;">
-          <div class="breadcrumbs" id="editor-breadcrumbs" style="border:none; padding:0; height:auto;">
-            <span class="breadcrumb-item">workspace</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button id="btn-run-code" title="Run in Execution Drawer" style="display:none; background:#181818; border:1px solid rgba(255,255,255,0.18); color:#ffffff; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
-              <span>▶</span> <span>Run</span>
-            </button>
-            <button id="btn-run-terminal" title="Run interactively in native Terminal Window (Command Prompt)" style="display:none; background:#181818; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
-              <span>↗</span> <span>Run in Terminal</span>
-            </button>
-            <button id="btn-delete-file" title="Delete current file from workspace" style="display:none; background:#181818; border:1px solid rgba(239,68,68,0.35); color:#fca5a5; font-size:11px; font-weight:600; padding:2px 10px; border-radius:12px; cursor:pointer; gap:4px; align-items:center;">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              <span>Delete</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Code Editor Area -->
-        <div class="code-editor-wrapper">
-          <div class="line-numbers" id="line-numbers">
-            <!-- Line numbers populated by editor.ts -->
-          </div>
-
-          <div class="code-area" id="code-content" contenteditable="true" spellcheck="false">
-            <!-- Code content loaded here -->
-          </div>
-
-          <!-- Minimap -->
-          <div class="minimap" id="editor-minimap">
-            <!-- Visual lines of minimap -->
-          </div>
-        </div>
-
-        <!-- Real Execution Output Drawer -->
-        <div id="execution-output-drawer" style="display:none; background:#0a0a0a; border-top:1px solid var(--border-subtle); padding:10px 14px; font-family:var(--font-code); font-size:12px; max-height:220px; overflow-y:auto;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; color:#a3a3a3; font-size:11px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span id="output-header-title" style="font-weight:600; color:#ffffff;">EXECUTION OUTPUT</span>
-              <button id="btn-drawer-terminal" title="Launch in interactive Command Prompt" style="background:#141414; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; font-size:11px; font-weight:600; padding:1px 8px; border-radius:10px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-                <span>↗</span> <span>Open in Terminal Window</span>
-              </button>
-            </div>
-            <span id="btn-close-output" style="cursor:pointer; font-size:12px; padding:2px 6px;">✕</span>
-          </div>
-          <pre id="output-content-text" style="margin:0; white-space:pre-wrap; color:#e2e8f0; line-height:18px;"></pre>
-        </div>
-      </main>
-
-      <!-- RESIZER: AGENT SIDECAR -->
-      <div class="resizer" id="resizer-agent" title="Drag to resize DEVs Agent"></div>
-
-      <!-- RIGHT SIDECAR: DEVS AGENT -->
-      <aside class="agent-pane" id="agent-pane">
+      <!-- MAIN AI AGENT WORKSPACE -->
+      <main class="agent-pane" id="agent-pane">
         <div class="agent-header">
           <div class="agent-title">
             <span>DEVs Agent</span>
           </div>
           <div class="agent-header-actions">
             <div class="action-icon" title="New Session" id="btn-new-chat">+</div>
-            <div class="action-icon" title="Close" id="btn-close-agent">✕</div>
           </div>
         </div>
 
