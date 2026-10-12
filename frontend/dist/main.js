@@ -2,18 +2,21 @@
 (() => {
   // src/api.ts
   var API_BASE = "/api";
-  async function getWorkspaceTree() {
-    const res = await fetch(`${API_BASE}/files/tree`);
+  async function getWorkspaceTree(folder) {
+    const url = folder ? `${API_BASE}/files/tree?folder=${encodeURIComponent(folder)}` : `${API_BASE}/files/tree`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to load file tree");
     return res.json();
   }
-  async function getWorkspaceInfo() {
-    const res = await fetch(`${API_BASE}/files/info`);
-    if (!res.ok) return { workspace_root: "user_files", name: "USER_FILES", git_branch: "main", python_version: "3.12" };
+  async function getWorkspaceInfo(folder) {
+    const url = folder ? `${API_BASE}/files/info?folder=${encodeURIComponent(folder)}` : `${API_BASE}/files/info`;
+    const res = await fetch(url);
+    if (!res.ok) return { workspace_root: "user_files", name: folder ? folder.toUpperCase() : "USER_FILES", git_branch: "main", python_version: "3.12" };
     return res.json();
   }
-  async function createItem(path, is_dir = false) {
-    const res = await fetch(`${API_BASE}/files/create`, {
+  async function createItem(path, is_dir = false, folder) {
+    const folderParam = folder ? `?folder=${encodeURIComponent(folder)}` : "";
+    const res = await fetch(`${API_BASE}/files/create${folderParam}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, is_dir })
@@ -21,11 +24,47 @@
     if (!res.ok) throw new Error(`Failed to create ${path}`);
     return res.json();
   }
-  async function deleteItem(path) {
-    const res = await fetch(`${API_BASE}/files/delete?path=${encodeURIComponent(path)}`, {
+  async function deleteItem(path, folder) {
+    const folderParam = folder ? `&folder=${encodeURIComponent(folder)}` : "";
+    const res = await fetch(`${API_BASE}/files/delete?path=${encodeURIComponent(path)}${folderParam}`, {
       method: "DELETE"
     });
     if (!res.ok) throw new Error(`Failed to delete ${path}`);
+    return res.json();
+  }
+  async function getChats() {
+    const res = await fetch(`${API_BASE}/chats`);
+    if (!res.ok) throw new Error("Failed to load chat sessions");
+    return res.json();
+  }
+  async function createChat(title, folder) {
+    const res = await fetch(`${API_BASE}/chats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, folder })
+    });
+    if (!res.ok) throw new Error("Failed to create new chat session");
+    return res.json();
+  }
+  async function getChatDetails(chatId) {
+    const res = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatId)}`);
+    if (!res.ok) throw new Error("Failed to load chat session details");
+    return res.json();
+  }
+  async function saveChatHistory(chatId, messages) {
+    const res = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatId)}/history`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages })
+    });
+    if (!res.ok) throw new Error("Failed to save chat history");
+    return res.json();
+  }
+  async function deleteChat(chatId) {
+    const res = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatId)}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) throw new Error("Failed to delete chat session");
     return res.json();
   }
   async function getModels() {
@@ -43,15 +82,21 @@
     }
     return res.json();
   }
-  async function streamChat(message, model, history, onChunk, onDone, onError) {
+  async function streamChat(message, model, history, callbacks, workspace, sessionId) {
     try {
       const res = await fetch(`${API_BASE}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, model, history })
+        body: JSON.stringify({
+          message,
+          model,
+          history,
+          workspace,
+          session_id: sessionId || "default"
+        })
       });
       if (!res.ok || !res.body) {
-        onError(`Request failed with status: ${res.status}`);
+        callbacks.onError(`Request failed with status: ${res.status}`);
         return;
       }
       const reader = res.body.getReader();
@@ -67,57 +112,159 @@
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.type === "chunk") {
-                onChunk(data.content);
+              if (data.type === "thinking") {
+                callbacks.onThinking?.(data.content || "Analyzing...");
+              } else if (data.type === "activity") {
+                callbacks.onActivity?.(data);
+              } else if (data.type === "file_action") {
+                callbacks.onFileAction?.(data);
+              } else if (data.type === "chunk") {
+                callbacks.onChunk(data.content);
               } else if (data.type === "error") {
-                onError(data.content);
+                callbacks.onError(data.content);
               } else if (data.type === "done") {
-                onDone(data);
+                callbacks.onDone(data);
                 return;
               }
             } catch (e) {
-              onChunk(line.slice(6));
+              callbacks.onChunk(line.slice(6));
             }
           }
         }
       }
-      onDone();
+      callbacks.onDone();
     } catch (err) {
-      onError(err.message || String(err));
+      callbacks.onError(err.message || String(err));
     }
   }
 
   // src/explorer.ts
   var FileExplorer = class {
     container;
+    chatsContainer;
     headerTitle;
     onFileSelect;
     onFileDeleted;
+    onChatSelect;
     activePath = null;
-    constructor(containerId, onFileSelect) {
+    activeChat = null;
+    chatsList = [];
+    constructor(containerId, onFileSelect, onChatSelect) {
       this.container = document.getElementById(containerId);
+      this.chatsContainer = document.getElementById("chat-sessions-list");
       this.headerTitle = document.getElementById("workspace-folder-name");
       this.onFileSelect = onFileSelect;
+      this.onChatSelect = onChatSelect;
       this.setupHeaderActions();
     }
     setOnFileDeleted(cb) {
       this.onFileDeleted = cb;
     }
+    setOnChatSelect(cb) {
+      this.onChatSelect = cb;
+    }
+    getActiveChat() {
+      return this.activeChat;
+    }
+    getActiveFolder() {
+      return this.activeChat?.folder;
+    }
     async init() {
+      await this.loadChats();
+    }
+    async loadChats() {
       try {
-        const info = await getWorkspaceInfo();
+        this.chatsList = await getChats();
+        if (!this.chatsList || this.chatsList.length === 0) {
+          const def = await createChat("Main Project", "project_1");
+          this.chatsList = [def];
+        }
+        if (!this.activeChat || !this.chatsList.find((c) => c.id === this.activeChat?.id)) {
+          this.activeChat = this.chatsList[0];
+        }
+        this.renderChatsList();
+        await this.refreshTree();
+        if (this.activeChat && this.onChatSelect) {
+          this.onChatSelect(this.activeChat);
+        }
+      } catch (err) {
+        console.error("Failed to load chats:", err);
+      }
+    }
+    renderChatsList() {
+      if (!this.chatsContainer) return;
+      this.chatsContainer.innerHTML = "";
+      for (const chat of this.chatsList) {
+        const li = document.createElement("li");
+        li.className = "chat-session-item";
+        if (this.activeChat && this.activeChat.id === chat.id) {
+          li.classList.add("active");
+        }
+        li.innerHTML = `
+        <div class="chat-session-main">
+          <svg class="chat-session-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <div class="chat-session-info">
+            <span class="chat-session-title">${this.escapeHtml(chat.title)}</span>
+            <span class="chat-session-folder">user_files/${this.escapeHtml(chat.folder)}/</span>
+          </div>
+        </div>
+        ${this.chatsList.length > 1 ? `<button class="chat-session-delete-btn" title="Delete chat & folder">
+                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+               </button>` : ""}
+      `;
+        li.addEventListener("click", async (e) => {
+          if (e.target.closest(".chat-session-delete-btn")) return;
+          if (this.activeChat?.id === chat.id) return;
+          this.activeChat = chat;
+          this.renderChatsList();
+          await this.refreshTree();
+          this.onChatSelect?.(chat);
+        });
+        const delBtn = li.querySelector(".chat-session-delete-btn");
+        delBtn?.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (confirm(`Delete chat "${chat.title}" and its directory user_files/${chat.folder}/?`)) {
+            try {
+              await deleteChat(chat.id);
+              if (this.activeChat?.id === chat.id) {
+                this.activeChat = null;
+              }
+              await this.loadChats();
+            } catch (err) {
+              alert("Failed to delete chat: " + (err.message || String(err)));
+            }
+          }
+        });
+        this.chatsContainer.appendChild(li);
+      }
+    }
+    async selectChatById(chatId) {
+      const found = this.chatsList.find((c) => c.id === chatId);
+      if (found) {
+        this.activeChat = found;
+        this.renderChatsList();
+        await this.refreshTree();
+        this.onChatSelect?.(found);
+      }
+    }
+    async refreshTree() {
+      const folder = this.activeChat?.folder;
+      try {
+        const info = await getWorkspaceInfo(folder);
         if (this.headerTitle) {
-          this.headerTitle.textContent = info.name || "WORKSPACE";
+          this.headerTitle.textContent = folder ? folder.toUpperCase() : info.name || "WORKSPACE";
         }
         const titleProject = document.getElementById("window-title-project");
         if (titleProject) {
-          titleProject.textContent = info.name || "workspace";
+          titleProject.textContent = folder || "workspace";
         }
         const agentWorkspace = document.querySelector(".agent-workspace-title");
         if (agentWorkspace) {
-          agentWorkspace.textContent = (info.name || "workspace").toLowerCase();
+          agentWorkspace.textContent = folder || "workspace";
         }
-        const tree = await getWorkspaceTree();
+        const tree = await getWorkspaceTree(folder);
         this.renderTree(tree);
       } catch (err) {
         console.warn("API tree load failed, using starter workspace", err);
@@ -125,6 +272,20 @@
       }
     }
     setupHeaderActions() {
+      const btnNewChat = document.getElementById("btn-new-chat-session");
+      btnNewChat?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const title = prompt("Enter project/chat name (e.g. Todo App, Calculator, Weather API):");
+        if (title && title.trim()) {
+          try {
+            const newSession = await createChat(title.trim());
+            this.activeChat = newSession;
+            await this.loadChats();
+          } catch (err) {
+            alert("Error creating chat session: " + err.message);
+          }
+        }
+      });
       const folderHeader = document.getElementById("workspace-folder-header");
       const folderToggleIcon = document.getElementById("workspace-folder-toggle");
       folderHeader?.addEventListener("click", (e) => {
@@ -141,8 +302,8 @@
         const filename = prompt("Enter new file name (e.g. app.py, models.py):");
         if (filename) {
           try {
-            await createItem(filename, false);
-            await this.init();
+            await createItem(filename, false, this.getActiveFolder());
+            await this.refreshTree();
             this.onFileSelect?.(filename, filename);
           } catch (err) {
             alert("Error creating file: " + err.message);
@@ -155,8 +316,8 @@
         const foldername = prompt("Enter new folder name (e.g. src, components):");
         if (foldername) {
           try {
-            await createItem(foldername, true);
-            await this.init();
+            await createItem(foldername, true, this.getActiveFolder());
+            await this.refreshTree();
           } catch (err) {
             alert("Error creating folder: " + err.message);
           }
@@ -165,7 +326,7 @@
       const btnRefresh = document.getElementById("btn-explorer-refresh");
       btnRefresh?.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.init();
+        this.refreshTree();
       });
     }
     setActive(path) {
@@ -189,7 +350,7 @@
         emptyDiv.style.fontSize = "12px";
         emptyDiv.style.lineHeight = "1.6";
         emptyDiv.innerHTML = `
-        <div style="color:#777777;">No files in workspace.</div>
+        <div style="color:#777777;">No files in this project folder yet.</div>
         <div style="margin-top:8px;">
           <button id="btn-empty-add-file" style="background:#181818; border:1px solid rgba(255,255,255,0.18); color:#ffffff; padding:4px 12px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:600;">+ New File</button>
         </div>
@@ -243,11 +404,11 @@
           return;
         }
         try {
-          await deleteItem(item.path);
+          await deleteItem(item.path, this.getActiveFolder());
           if (this.onFileDeleted) {
             this.onFileDeleted(item.path);
           }
-          await this.init();
+          await this.refreshTree();
         } catch (err) {
           alert("Failed to delete: " + (err.message || String(err)));
         }
@@ -299,6 +460,9 @@
     renderFallbackTree() {
       this.renderTree([]);
     }
+    escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
   };
 
   // src/agent.ts
@@ -313,6 +477,7 @@
     currentModel = "nvidia:meta/llama-3.2-11b-vision-instruct";
     modelDisplayName = "NVIDIA Llama 3.2 11B";
     availableModels = [];
+    activeChat = null;
     history = [];
     isGenerating = false;
     constructor(explorer) {
@@ -325,6 +490,81 @@
       this.newChatBtn = document.getElementById("btn-new-chat");
       this.setupListeners();
       this.initModels();
+      if (this.explorer) {
+        this.explorer.setOnChatSelect((chat) => this.switchChat(chat));
+      }
+    }
+    async switchChat(chat) {
+      this.activeChat = chat;
+      this.history = [];
+      this.messagesContainer.innerHTML = "";
+      const agentWorkspace = document.querySelector(".agent-workspace-title");
+      if (agentWorkspace) {
+        agentWorkspace.textContent = chat.folder;
+      }
+      try {
+        const details = await getChatDetails(chat.id);
+        if (details.history && details.history.length > 0) {
+          this.history = details.history;
+          this.renderLoadedHistory();
+          return;
+        }
+      } catch (err) {
+        console.warn("Failed to fetch history for chat:", chat.id, err);
+      }
+      this.renderWelcomeMessage();
+    }
+    renderWelcomeMessage() {
+      const welcomeBubble = document.createElement("div");
+      welcomeBubble.className = "chat-bubble assistant";
+      welcomeBubble.innerHTML = `
+      <div class="assistant-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>DEVs Agent</span>
+        <span class="active-folder-badge">user_files/${this.activeChat?.folder || "project_1"}/</span>
+      </div>
+      <div class="assistant-markdown-content">
+        <p>Session started for <strong>${this.escapeHtml(this.activeChat?.title || "Project")}</strong>.</p>
+        <p style="color:var(--text-muted); font-size:12px;">Files created will be placed directly in <code>user_files/${this.escapeHtml(this.activeChat?.folder || "project_1")}/</code>. What would you like to build?</p>
+      </div>
+    `;
+      this.messagesContainer.appendChild(welcomeBubble);
+      this.scrollToBottom();
+    }
+    renderLoadedHistory() {
+      for (const msg of this.history) {
+        if (msg.role === "user") {
+          const userBubble = document.createElement("div");
+          userBubble.className = "chat-bubble user";
+          userBubble.textContent = msg.content;
+          this.messagesContainer.appendChild(userBubble);
+        } else {
+          const assistantBubble = document.createElement("div");
+          assistantBubble.className = "chat-bubble assistant";
+          const header = document.createElement("div");
+          header.className = "assistant-header";
+          header.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <span>DEVs Agent</span>
+          ${msg.thought_time ? `<span class="thought-time-tag">${msg.thought_time}</span>` : ""}
+        `;
+          assistantBubble.appendChild(header);
+          if (msg.file_actions && msg.file_actions.length > 0) {
+            const cardsContainer = document.createElement("div");
+            cardsContainer.className = "file-action-cards-container";
+            for (const fa of msg.file_actions) {
+              cardsContainer.appendChild(this.createFileActionCard(fa));
+            }
+            assistantBubble.appendChild(cardsContainer);
+          }
+          const mdDiv = document.createElement("div");
+          mdDiv.className = "assistant-markdown-content";
+          mdDiv.innerHTML = this.renderMarkdown(msg.content);
+          assistantBubble.appendChild(mdDiv);
+          this.messagesContainer.appendChild(assistantBubble);
+        }
+      }
+      this.scrollToBottom();
     }
     async initModels() {
       try {
@@ -367,17 +607,19 @@
         this.promptInput.style.height = "auto";
         this.promptInput.style.height = `${Math.min(this.promptInput.scrollHeight, 120)}px`;
       });
-      this.newChatBtn.addEventListener("click", () => {
-        this.history = [];
-        this.messagesContainer.innerHTML = `
-        <div class="chat-bubble assistant">
-          <div class="assistant-header">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            <span>DEVs Agent</span>
-          </div>
-          <div>New session started. How can I help you build today?</div>
-        </div>
-      `;
+      this.newChatBtn.addEventListener("click", async () => {
+        const title = prompt("Enter new project name:");
+        if (title && title.trim()) {
+          try {
+            const created = await createChat(title.trim());
+            if (this.explorer) {
+              await this.explorer.loadChats();
+              await this.explorer.selectChatById(created.id);
+            }
+          } catch (err) {
+            alert("Failed to create new chat: " + (err.message || String(err)));
+          }
+        }
       });
       this.messagesContainer.addEventListener("click", (e) => {
         const target = e.target;
@@ -429,59 +671,174 @@
       this.isGenerating = true;
       this.promptInput.value = "";
       this.promptInput.style.height = "auto";
+      const activeFolder = this.explorer?.getActiveFolder() || this.activeChat?.folder || "project_1";
+      const activeChatId = this.activeChat?.id || "chat_default";
       const userBubble = document.createElement("div");
       userBubble.className = "chat-bubble user";
       userBubble.textContent = text;
       this.messagesContainer.appendChild(userBubble);
-      const priorHistory = [...this.history];
+      const priorHistory = this.history.map((m) => ({ role: m.role, content: m.content }));
       this.history.push({ role: "user", content: text });
       const assistantBubble = document.createElement("div");
       assistantBubble.className = "chat-bubble assistant";
       const header = document.createElement("div");
       header.className = "assistant-header";
       header.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-      <span>DEVs Agent</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>DEVs Agent</span>
+      </div>
+      <span class="active-folder-badge">user_files/${this.escapeHtml(activeFolder)}/</span>
     `;
       assistantBubble.appendChild(header);
+      const thinkingCard = document.createElement("div");
+      thinkingCard.className = "thinking-card";
+      const thinkingHeader = document.createElement("div");
+      thinkingHeader.className = "thinking-header";
+      thinkingHeader.innerHTML = `
+      <div class="thinking-title">
+        <span class="thinking-pulse-dot"></span>
+        <span class="thinking-label">Thinking...</span>
+        <span class="thinking-timer">0.0s</span>
+      </div>
+      <span class="thinking-toggle-arrow">\u25BE</span>
+    `;
+      const thinkingBody = document.createElement("div");
+      thinkingBody.className = "thinking-body";
+      thinkingCard.appendChild(thinkingHeader);
+      thinkingCard.appendChild(thinkingBody);
+      assistantBubble.appendChild(thinkingCard);
+      thinkingHeader.addEventListener("click", () => {
+        const isCollapsed = thinkingBody.style.display === "none";
+        thinkingBody.style.display = isCollapsed ? "flex" : "none";
+        const arrow = thinkingHeader.querySelector(".thinking-toggle-arrow");
+        if (arrow) arrow.textContent = isCollapsed ? "\u25BE" : "\u25B8";
+      });
+      const actionCardsContainer = document.createElement("div");
+      actionCardsContainer.className = "file-action-cards-container";
+      assistantBubble.appendChild(actionCardsContainer);
       const contentDiv = document.createElement("div");
-      contentDiv.innerHTML = '<span style="color:#888;">Thinking & writing code...</span>';
+      contentDiv.className = "assistant-markdown-content";
       assistantBubble.appendChild(contentDiv);
       this.messagesContainer.appendChild(assistantBubble);
       this.scrollToBottom();
+      const startTime = performance.now();
+      const timerSpan = thinkingHeader.querySelector(".thinking-timer");
+      const labelSpan = thinkingHeader.querySelector(".thinking-label");
+      const pulseDot = thinkingHeader.querySelector(".thinking-pulse-dot");
+      const timerInterval = setInterval(() => {
+        const elapsed = ((performance.now() - startTime) / 1e3).toFixed(1);
+        if (timerSpan) timerSpan.textContent = `${elapsed}s`;
+      }, 100);
       let fullResponse = "";
+      const collectedActivities = [];
+      const collectedFileActions = [];
+      const appendThinkingStep = (text2) => {
+        const step = document.createElement("div");
+        step.className = "thinking-step";
+        step.innerHTML = `
+        <span class="step-bullet">\u203A</span>
+        <span class="step-text">${this.escapeHtml(text2)}</span>
+      `;
+        thinkingBody.appendChild(step);
+        this.scrollToBottom();
+      };
+      appendThinkingStep("Analyzing request and workspace...");
       await streamChat(
         text,
         this.currentModel,
         priorHistory,
-        (chunk) => {
-          if (!fullResponse) {
-            contentDiv.innerHTML = "";
+        {
+          onThinking: (thought) => {
+            appendThinkingStep(thought);
+          },
+          onActivity: (activity) => {
+            collectedActivities.push(activity);
+            if (activity.detail) {
+              appendThinkingStep(activity.detail);
+            } else if (activity.action === "analyze") {
+              appendThinkingStep(`Analyzing directory '${activity.file || "."}'...`);
+            } else if (activity.action === "read") {
+              appendThinkingStep(`Inspecting file '${activity.file}'...`);
+            }
+          },
+          onFileAction: (fa) => {
+            const isDuplicate = collectedFileActions.some(
+              (existing) => existing.file === fa.file && existing.action === fa.action && existing.lines === fa.lines
+            );
+            if (!isDuplicate) {
+              collectedFileActions.push(fa);
+              const card = this.createFileActionCard(fa);
+              actionCardsContainer.appendChild(card);
+              this.scrollToBottom();
+            }
+            if (this.explorer) {
+              this.explorer.refreshTree();
+            }
+          },
+          onChunk: (chunk) => {
+            fullResponse += chunk;
+            contentDiv.innerHTML = this.renderMarkdown(fullResponse);
+            this.scrollToBottom();
+          },
+          onDone: async (data) => {
+            clearInterval(timerInterval);
+            this.isGenerating = false;
+            const totalTime = ((performance.now() - startTime) / 1e3).toFixed(1);
+            if (timerSpan) timerSpan.textContent = `${totalTime}s`;
+            if (labelSpan) labelSpan.textContent = `Thought for ${totalTime}s`;
+            if (pulseDot) pulseDot.style.background = "#10b981";
+            this.history.push({
+              role: "assistant",
+              content: fullResponse,
+              thought_time: `Thought for ${totalTime}s`,
+              activities: collectedActivities,
+              file_actions: collectedFileActions
+            });
+            try {
+              await saveChatHistory(activeChatId, this.history);
+            } catch (e) {
+              console.warn("Failed to save chat history:", e);
+            }
+            if (this.explorer) {
+              await this.explorer.refreshTree();
+            }
+          },
+          onError: (err) => {
+            clearInterval(timerInterval);
+            this.isGenerating = false;
+            if (this.history.length > 0 && this.history[this.history.length - 1].role === "user") {
+              this.history.pop();
+            }
+            if (labelSpan) labelSpan.textContent = "Failed";
+            if (pulseDot) pulseDot.style.background = "#ef4444";
+            contentDiv.innerHTML += `<div style="color:#f48771; margin-top:8px; font-size:12px; font-weight:500;">\u26A0\uFE0F Error: ${this.escapeHtml(err)}</div>`;
+            this.scrollToBottom();
           }
-          fullResponse += chunk;
-          contentDiv.innerHTML = this.renderMarkdown(fullResponse);
-          this.scrollToBottom();
         },
-        async (data) => {
-          this.isGenerating = false;
-          this.history.push({ role: "assistant", content: fullResponse });
-          this.scrollToBottom();
-          if (this.explorer) {
-            await this.explorer.init();
-          }
-          if (data?.modified_files && data.modified_files.length > 0 && this.explorer) {
-            await this.explorer.init();
-          }
-        },
-        (err) => {
-          this.isGenerating = false;
-          if (this.history.length > 0 && this.history[this.history.length - 1].role === "user") {
-            this.history.pop();
-          }
-          contentDiv.innerHTML += `<div style="color:#f48771; margin-top:6px;">Error: ${err}</div>`;
-          this.scrollToBottom();
-        }
+        activeFolder,
+        activeChatId
       );
+    }
+    createFileActionCard(fa) {
+      const card = document.createElement("div");
+      card.className = "file-action-card";
+      const isEdit = fa.action === "edit";
+      const linesBadge = isEdit ? `<span class="line-badge edit">\xB1${fa.lines ?? 0} lines</span>` : `<span class="line-badge write">+${fa.lines ?? 0} lines</span>`;
+      const iconSvg = isEdit ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>` : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>`;
+      card.innerHTML = `
+      <div class="file-action-left">
+        <span class="file-action-icon">${iconSvg}</span>
+        <div class="file-action-meta">
+          <span class="file-action-name">${this.escapeHtml(fa.file || "file")}</span>
+          <span class="file-action-status">${isEdit ? "Modified file" : "Created new file"}</span>
+        </div>
+      </div>
+      <div class="file-action-right">
+        ${linesBadge}
+      </div>
+    `;
+      return card;
     }
     renderMarkdown(md) {
       let html = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -489,24 +846,22 @@
         const language = lang || "code";
         const coloredCode = code.replace(/\b(def|class|return|if|else|elif|import|from|as|while|for|in|try|except|finally|with|async|await|const|let|var|function)\b/g, '<span class="syn-kw">$1</span>').replace(/\b(RunContext|AgentDeps|Agent|Tool|str|int|bool|list|dict|bytes)\b/g, '<span class="syn-type">$1</span>').replace(/("[^"\n]*"|'[^'\n]*')/g, '<span class="syn-str">$1</span>').replace(/(#.*$|\/\/.*$)/gm, '<span class="syn-comment">$1</span>').replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g, '<span class="syn-fn">$1</span>');
         return `
-        <div class="chat-code-block" style="background:#000000; border:1px solid rgba(255,255,255,0.12); border-radius:10px; margin:10px 0; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; background:#121212; padding:5px 12px; font-size:11px; color:#a3a3a3; border-bottom:1px solid rgba(255,255,255,0.08); font-family:var(--font-code);">
-            <span style="font-weight:600; color:#e2e8f0;">${language}</span>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <button class="btn-copy-code" style="background:#181818; border:1px solid rgba(255,255,255,0.15); color:#a3a3a3; padding:2px 8px; border-radius:10px; font-size:10px; cursor:pointer;">
-                Copy
-              </button>
-            </div>
+        <div class="chat-code-block">
+          <div class="chat-code-header">
+            <span class="code-lang-label">${language}</span>
+            <button class="btn-copy-code">Copy</button>
           </div>
-          <pre style="padding:10px 14px; margin:0; overflow-x:auto; font-family:var(--font-code); font-size:12px; line-height:20px; color:#e2e8f0;"><code>${coloredCode}</code></pre>
+          <pre><code>${coloredCode}</code></pre>
         </div>
       `;
       });
-      html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08); color:#ffffff; padding:2px 6px; border-radius:4px; font-family:var(--font-code); font-size:12px; border:1px solid rgba(255,255,255,0.15);">$1</code>');
+      html = html.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
       html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      html = html.replace(/(calling \w+\([^\)]*\))/g, '<div class="tool-call-banner">\u{1F6E0} $1</div>');
       html = html.replace(/\n\n/g, "<br><br>");
       return html;
+    }
+    escapeHtml(str) {
+      return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
     scrollToBottom() {
       const parent = this.messagesContainer.parentElement;
@@ -548,8 +903,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     setupResizers();
     const explorer = new FileExplorer("file-tree-root");
-    explorer.init();
     const agent = new AgentChat(explorer);
+    explorer.init();
     const sidebar = document.getElementById("sidebar-explorer");
     const btnToggleSidebar = document.getElementById("btn-toggle-sidebar");
     const toggleSidebar = () => {
@@ -560,3 +915,4 @@
     console.log("DEVs Agent Workspace Frontend initialized successfully.");
   });
 })();
+//# sourceMappingURL=main.js.map

@@ -37,6 +37,12 @@ def ls(ctx: RunContext[AgentDeps], dir: str = ".") -> str:
 
     file_info = [f"Result for '{dir if dir != '.' else '.'}' directory:"]
     try:
+        if hasattr(ctx.deps, "record_activity"):
+            ctx.deps.record_activity({
+                "type": "activity",
+                "action": "analyzing",
+                "detail": f"Analyzing directory '{dir if dir != '.' else '.'}'"
+            })
         contents = sorted(os.listdir(target_dir))
         for item in contents:
             item_path = os.path.join(target_dir, item)

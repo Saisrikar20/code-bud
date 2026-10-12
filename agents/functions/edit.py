@@ -52,10 +52,23 @@ def edit(ctx: RunContext[AgentDeps], file_path: str, old_string: str, new_string
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
+        clean_rel = os.path.relpath(target_path, abs_path).replace("\\", "/")
+        new_lines_count = len(new_string.splitlines())
+        old_lines_count = len(old_string.splitlines())
+
         if hasattr(ctx.deps, "modified_files"):
-            clean_rel = os.path.relpath(target_path, abs_path).replace("\\", "/")
             if clean_rel not in ctx.deps.modified_files:
                 ctx.deps.modified_files.append(clean_rel)
+
+        if hasattr(ctx.deps, "record_activity"):
+            ctx.deps.record_activity({
+                "type": "file_action",
+                "action": "edit",
+                "file": clean_rel,
+                "lines": new_lines_count,
+                "old_lines": old_lines_count,
+                "detail": f"Edited {clean_rel} (replaced {old_lines_count} lines with {new_lines_count} lines)"
+            })
 
         diff = "\n".join(
             difflib.unified_diff(

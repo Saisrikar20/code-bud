@@ -6,9 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupResizers();
 
   const explorer = new FileExplorer('file-tree-root');
-  explorer.init();
-
   const agent = new AgentChat(explorer);
+  explorer.init();
 
   // Sidebar toggle
   const sidebar = document.getElementById('sidebar-explorer') as HTMLElement;

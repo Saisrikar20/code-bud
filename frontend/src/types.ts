@@ -37,3 +37,25 @@ export interface EditorTab {
   modified: boolean;
   badge?: string;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  folder: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ActivityEvent {
+  type: 'thinking' | 'activity' | 'file_action' | 'chunk' | 'done' | 'error';
+  status?: string;
+  content?: string;
+  action?: 'write' | 'edit' | 'read' | 'analyze';
+  file?: string;
+  lines?: number;
+  old_lines?: number;
+  detail?: string;
+  modified_files?: string[];
+  activities?: any[];
+}
+

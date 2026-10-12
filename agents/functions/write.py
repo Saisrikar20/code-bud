@@ -37,11 +37,22 @@ def write(ctx: RunContext[AgentDeps], file_path: str, content: str) -> str:
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(content)
 
+        lines_count = len(content.splitlines())
+        clean_rel = os.path.relpath(target_path, abs_path).replace("\\", "/")
+
         if hasattr(ctx.deps, "modified_files"):
-            clean_rel = os.path.relpath(target_path, abs_path).replace("\\", "/")
             if clean_rel not in ctx.deps.modified_files:
                 ctx.deps.modified_files.append(clean_rel)
 
-        return f'Successfully wrote {len(content)} characters to "{file_path}".'
+        if hasattr(ctx.deps, "record_activity"):
+            ctx.deps.record_activity({
+                "type": "file_action",
+                "action": "write",
+                "file": clean_rel,
+                "lines": lines_count,
+                "detail": f"Wrote {clean_rel} ({lines_count} lines)"
+            })
+
+        return f'Successfully wrote {len(content)} characters ({lines_count} lines) to "{file_path}".'
     except Exception as e:
         return f'Error writing to "{file_path}": {e}'

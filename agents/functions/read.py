@@ -32,6 +32,14 @@ def read(ctx: RunContext[AgentDeps], file_path: str, max_chars: int = 10_000) ->
         return f'Error: "{file_path}" is a directory, not a file. Use ls instead.'
 
     try:
+        if hasattr(ctx.deps, "record_activity"):
+            ctx.deps.record_activity({
+                "type": "activity",
+                "action": "reading",
+                "file": file_path,
+                "detail": f"Inspecting {file_path}"
+            })
+
         with open(target_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read(max_chars + 1)
         if len(content) > max_chars:

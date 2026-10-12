@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .routes import health_router, files_router, chat_router
+from .routes import health_router, files_router, chat_router, chats_router
 
 app = FastAPI(
     title="Code-Bud Antigravity IDE",
@@ -33,6 +33,7 @@ async def add_no_cache_headers(request, call_next):
 app.include_router(health_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(chats_router, prefix="/api")
 
 # Static frontend assets
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"

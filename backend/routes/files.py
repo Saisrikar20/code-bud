@@ -35,12 +35,15 @@ def build_file_tree(dir_path: str, base_path: str, max_depth: int = 4, current_d
         pass
     return items
 
+def get_current_workspace(folder: Optional[str] = Query(None)) -> str:
+    return get_workspace_dir(folder)
+
 @router.get("/tree", response_model=List[FileItem])
-async def get_tree(workspace: str = Depends(get_workspace_dir)):
+async def get_tree(workspace: str = Depends(get_current_workspace)):
     return build_file_tree(workspace, workspace)
 
 @router.get("/content", response_model=FileContent)
-async def get_file_content(path: str = Query(..., description="Relative path to file"), workspace: str = Depends(get_workspace_dir)):
+async def get_file_content(path: str = Query(..., description="Relative path to file"), workspace: str = Depends(get_current_workspace)):
     abs_workspace = os.path.abspath(workspace)
     full_path = os.path.normpath(os.path.join(abs_workspace, path))
 
@@ -63,7 +66,7 @@ async def get_file_content(path: str = Query(..., description="Relative path to 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/save")
-async def save_file(req: FileSaveRequest, workspace: str = Depends(get_workspace_dir)):
+async def save_file(req: FileSaveRequest, workspace: str = Depends(get_current_workspace)):
     abs_workspace = os.path.abspath(workspace)
     full_path = os.path.normpath(os.path.join(abs_workspace, req.path))
 
@@ -82,7 +85,7 @@ async def save_file(req: FileSaveRequest, workspace: str = Depends(get_workspace
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/create")
-async def create_item(req: dict, workspace: str = Depends(get_workspace_dir)):
+async def create_item(req: dict, workspace: str = Depends(get_current_workspace)):
     rel_path = req.get("path")
     is_dir = req.get("is_dir", False)
     if not rel_path:
@@ -104,7 +107,7 @@ async def create_item(req: dict, workspace: str = Depends(get_workspace_dir)):
     return {"status": "created", "path": rel_path, "is_dir": is_dir}
 
 @router.delete("/delete")
-async def delete_item(path: str = Query(...), workspace: str = Depends(get_workspace_dir)):
+async def delete_item(path: str = Query(...), workspace: str = Depends(get_current_workspace)):
     abs_workspace = os.path.abspath(workspace)
     full_path = os.path.normpath(os.path.join(abs_workspace, path))
     
@@ -141,7 +144,7 @@ def detect_git_branch(path: str) -> str:
     return "main"
 
 @router.get("/info")
-async def get_workspace_info(workspace: str = Depends(get_workspace_dir)):
+async def get_workspace_info(workspace: str = Depends(get_current_workspace)):
     return {
         "workspace_root": workspace,
         "name": os.path.basename(workspace).upper(),

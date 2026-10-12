@@ -1,17 +1,37 @@
-import { FileItem } from './types';
-import { getWorkspaceTree, getWorkspaceInfo, createItem, deleteItem } from './api';
+import { FileItem, ChatSession } from './types';
+import {
+  getWorkspaceTree,
+  getWorkspaceInfo,
+  createItem,
+  deleteItem,
+  getChats,
+  createChat,
+  deleteChat,
+} from './api';
 
 export class FileExplorer {
   private container: HTMLElement;
+  private chatsContainer: HTMLElement | null;
   private headerTitle: HTMLElement | null;
   private onFileSelect?: (path: string, name: string) => void;
   private onFileDeleted?: (path: string) => void;
-  private activePath: string | null = null;
+  private onChatSelect?: (chat: ChatSession) => void;
 
-  constructor(containerId: string, onFileSelect?: (path: string, name: string) => void) {
+  private activePath: string | null = null;
+  private activeChat: ChatSession | null = null;
+  private chatsList: ChatSession[] = [];
+
+  constructor(
+    containerId: string,
+    onFileSelect?: (path: string, name: string) => void,
+    onChatSelect?: (chat: ChatSession) => void
+  ) {
     this.container = document.getElementById(containerId) as HTMLElement;
+    this.chatsContainer = document.getElementById('chat-sessions-list');
     this.headerTitle = document.getElementById('workspace-folder-name');
     this.onFileSelect = onFileSelect;
+    this.onChatSelect = onChatSelect;
+
     this.setupHeaderActions();
   }
 
@@ -19,22 +39,135 @@ export class FileExplorer {
     this.onFileDeleted = cb;
   }
 
+  setOnChatSelect(cb: (chat: ChatSession) => void): void {
+    this.onChatSelect = cb;
+  }
+
+  getActiveChat(): ChatSession | null {
+    return this.activeChat;
+  }
+
+  getActiveFolder(): string | undefined {
+    return this.activeChat?.folder;
+  }
+
   async init(): Promise<void> {
+    await this.loadChats();
+  }
+
+  async loadChats(): Promise<void> {
     try {
-      const info = await getWorkspaceInfo();
+      this.chatsList = await getChats();
+      if (!this.chatsList || this.chatsList.length === 0) {
+        // Create initial default chat if empty
+        const def = await createChat('Main Project', 'project_1');
+        this.chatsList = [def];
+      }
+
+      // If activeChat is null or no longer in list, pick the first one
+      if (!this.activeChat || !this.chatsList.find((c) => c.id === this.activeChat?.id)) {
+        this.activeChat = this.chatsList[0];
+      }
+
+      this.renderChatsList();
+      await this.refreshTree();
+
+      if (this.activeChat && this.onChatSelect) {
+        this.onChatSelect(this.activeChat);
+      }
+    } catch (err) {
+      console.error('Failed to load chats:', err);
+    }
+  }
+
+  renderChatsList(): void {
+    if (!this.chatsContainer) return;
+    this.chatsContainer.innerHTML = '';
+
+    for (const chat of this.chatsList) {
+      const li = document.createElement('li');
+      li.className = 'chat-session-item';
+      if (this.activeChat && this.activeChat.id === chat.id) {
+        li.classList.add('active');
+      }
+
+      li.innerHTML = `
+        <div class="chat-session-main">
+          <svg class="chat-session-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <div class="chat-session-info">
+            <span class="chat-session-title">${this.escapeHtml(chat.title)}</span>
+            <span class="chat-session-folder">user_files/${this.escapeHtml(chat.folder)}/</span>
+          </div>
+        </div>
+        ${
+          this.chatsList.length > 1
+            ? `<button class="chat-session-delete-btn" title="Delete chat & folder">
+                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+               </button>`
+            : ''
+        }
+      `;
+
+      // Select chat on click
+      li.addEventListener('click', async (e) => {
+        if ((e.target as HTMLElement).closest('.chat-session-delete-btn')) return;
+        if (this.activeChat?.id === chat.id) return;
+        this.activeChat = chat;
+        this.renderChatsList();
+        await this.refreshTree();
+        this.onChatSelect?.(chat);
+      });
+
+      // Delete chat
+      const delBtn = li.querySelector('.chat-session-delete-btn');
+      delBtn?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete chat "${chat.title}" and its directory user_files/${chat.folder}/?`)) {
+          try {
+            await deleteChat(chat.id);
+            if (this.activeChat?.id === chat.id) {
+              this.activeChat = null;
+            }
+            await this.loadChats();
+          } catch (err: any) {
+            alert('Failed to delete chat: ' + (err.message || String(err)));
+          }
+        }
+      });
+
+      this.chatsContainer.appendChild(li);
+    }
+  }
+
+  async selectChatById(chatId: string): Promise<void> {
+    const found = this.chatsList.find((c) => c.id === chatId);
+    if (found) {
+      this.activeChat = found;
+      this.renderChatsList();
+      await this.refreshTree();
+      this.onChatSelect?.(found);
+    }
+  }
+
+  async refreshTree(): Promise<void> {
+    const folder = this.activeChat?.folder;
+    try {
+      const info = await getWorkspaceInfo(folder);
       if (this.headerTitle) {
-        this.headerTitle.textContent = info.name || 'WORKSPACE';
+        this.headerTitle.textContent = folder ? folder.toUpperCase() : (info.name || 'WORKSPACE');
       }
       const titleProject = document.getElementById('window-title-project');
       if (titleProject) {
-        titleProject.textContent = info.name || 'workspace';
+        titleProject.textContent = folder || 'workspace';
       }
       const agentWorkspace = document.querySelector('.agent-workspace-title');
       if (agentWorkspace) {
-        agentWorkspace.textContent = (info.name || 'workspace').toLowerCase();
+        agentWorkspace.textContent = folder || 'workspace';
       }
 
-      const tree = await getWorkspaceTree();
+      const tree = await getWorkspaceTree(folder);
       this.renderTree(tree);
     } catch (err) {
       console.warn('API tree load failed, using starter workspace', err);
@@ -43,10 +176,25 @@ export class FileExplorer {
   }
 
   private setupHeaderActions(): void {
+    // New Chat session button
+    const btnNewChat = document.getElementById('btn-new-chat-session');
+    btnNewChat?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const title = prompt('Enter project/chat name (e.g. Todo App, Calculator, Weather API):');
+      if (title && title.trim()) {
+        try {
+          const newSession = await createChat(title.trim());
+          this.activeChat = newSession;
+          await this.loadChats();
+        } catch (err: any) {
+          alert('Error creating chat session: ' + err.message);
+        }
+      }
+    });
+
     const folderHeader = document.getElementById('workspace-folder-header');
     const folderToggleIcon = document.getElementById('workspace-folder-toggle');
     folderHeader?.addEventListener('click', (e) => {
-      // Don't toggle if clicking one of the action buttons
       if ((e.target as HTMLElement).closest('.tree-action-icon')) return;
       const isHidden = this.container.style.display === 'none';
       this.container.style.display = isHidden ? 'block' : 'none';
@@ -61,8 +209,8 @@ export class FileExplorer {
       const filename = prompt('Enter new file name (e.g. app.py, models.py):');
       if (filename) {
         try {
-          await createItem(filename, false);
-          await this.init();
+          await createItem(filename, false, this.getActiveFolder());
+          await this.refreshTree();
           this.onFileSelect?.(filename, filename);
         } catch (err: any) {
           alert('Error creating file: ' + err.message);
@@ -76,8 +224,8 @@ export class FileExplorer {
       const foldername = prompt('Enter new folder name (e.g. src, components):');
       if (foldername) {
         try {
-          await createItem(foldername, true);
-          await this.init();
+          await createItem(foldername, true, this.getActiveFolder());
+          await this.refreshTree();
         } catch (err: any) {
           alert('Error creating folder: ' + err.message);
         }
@@ -87,7 +235,7 @@ export class FileExplorer {
     const btnRefresh = document.getElementById('btn-explorer-refresh');
     btnRefresh?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.init();
+      this.refreshTree();
     });
   }
 
@@ -113,7 +261,7 @@ export class FileExplorer {
       emptyDiv.style.fontSize = '12px';
       emptyDiv.style.lineHeight = '1.6';
       emptyDiv.innerHTML = `
-        <div style="color:#777777;">No files in workspace.</div>
+        <div style="color:#777777;">No files in this project folder yet.</div>
         <div style="margin-top:8px;">
           <button id="btn-empty-add-file" style="background:#181818; border:1px solid rgba(255,255,255,0.18); color:#ffffff; padding:4px 12px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:600;">+ New File</button>
         </div>
@@ -179,11 +327,11 @@ export class FileExplorer {
         return;
       }
       try {
-        await deleteItem(item.path);
+        await deleteItem(item.path, this.getActiveFolder());
         if (this.onFileDeleted) {
           this.onFileDeleted(item.path);
         }
-        await this.init();
+        await this.refreshTree();
       } catch (err: any) {
         alert('Failed to delete: ' + (err.message || String(err)));
       }
@@ -241,5 +389,13 @@ export class FileExplorer {
 
   private renderFallbackTree(): void {
     this.renderTree([]);
+  }
+
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 }
