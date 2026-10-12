@@ -840,36 +840,6 @@
     `;
       return card;
     }
-    highlightCode(rawCode) {
-      const tokenRegex = /(#[^\n]*|\/\/[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b(def|class|return|if|else|elif|import|from|as|while|for|in|try|except|finally|with|async|await|const|let|var|function)\b|\b(RunContext|AgentDeps|Agent|Tool|str|int|bool|list|dict|bytes|float|tuple|set|Any|Optional)\b|\b([a-zA-Z_]\w*)(?=\s*\()/g;
-      let lastIndex = 0;
-      let result = "";
-      let match;
-      while ((match = tokenRegex.exec(rawCode)) !== null) {
-        if (match.index > lastIndex) {
-          result += this.escapeHtml(rawCode.slice(lastIndex, match.index));
-        }
-        const [fullMatch, comment, str, kw, type, fn] = match;
-        if (comment) {
-          result += `<span class="syn-comment">${this.escapeHtml(comment)}</span>`;
-        } else if (str) {
-          result += `<span class="syn-str">${this.escapeHtml(str)}</span>`;
-        } else if (kw) {
-          result += `<span class="syn-kw">${this.escapeHtml(kw)}</span>`;
-        } else if (type) {
-          result += `<span class="syn-type">${this.escapeHtml(type)}</span>`;
-        } else if (fn) {
-          result += `<span class="syn-fn">${this.escapeHtml(fn)}</span>`;
-        } else {
-          result += this.escapeHtml(fullMatch);
-        }
-        lastIndex = match.index + fullMatch.length;
-      }
-      if (lastIndex < rawCode.length) {
-        result += this.escapeHtml(rawCode.slice(lastIndex));
-      }
-      return result;
-    }
     renderMarkdown(md) {
       if (!md) return "";
       let processed = md.replace(/```[a-zA-Z0-9_-]*\n[\s\S]*?(?:```|$)/g, "").trim();
